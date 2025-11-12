@@ -1215,4 +1215,394 @@ function updateRecapitulatif() {
   window.syncFraisToSession = syncFraisToSession;
   window.escapeHtml = escapeHtml;
 
+
+  /**
+ * ========================================
+ * FONCTIONS STEP 6 LOCALSTORAGE
+ * ========================================
+ */
+
+/**
+ * Récupération des données pour Step 6 (localStorage prioritaire)
+ */
+function getConfigForStep6() {
+  const localConfig = JSON.parse(localStorage.getItem('soeasyConfig') || '{}');
+  const sessionConfig = window.step6Data?.sessionConfig || {};
+
+  if (Object.keys(localConfig).length > 0) {
+    console.log('📱 Step 6 : Utilisation des données localStorage');
+    return localConfig;
+  } else if (Object.keys(sessionConfig).length > 0) {
+    console.log('🖥️ Step 6 : Fallback vers données session');
+    return sessionConfig;
+  } else {
+    console.log('⚠️ Step 6 : Aucune donnée trouvée');
+    return {};
+  }
+}
+
+/**
+ * Génération principale du contenu Step 6
+ */
+function generateStep6Content() {
+  console.log('🎯 Génération du contenu Step 6 depuis localStorage');
+
+  try {
+    // 1. Récupérer les données
+    const config = getConfigForStep6();
+    const adresses = JSON.parse(localStorage.getItem('soeasyAdresses') || '[]');
+    const mode = getSelectedFinancementMode();
+    const engagement = getSelectedEngagement();
+
+    console.log('📦 Config Step 6:', config);
+    console.log('📍 Adresses:', adresses);
+    console.log('💳 Mode financement:', mode);
+    console.log('📅 Engagement:', engagement);
+
+    // 2. Vérifier qu'on a des données
+    if (Object.keys(config).length === 0) {
+      $('#step6-content').html(`
+        <div class="alert alert-warning">
+          <h5><i class="fas fa-exclamation-triangle me-2"></i> Configuration vide</h5>
+          <p>Aucune configuration trouvée. Veuillez reprendre depuis l'étape 1.</p>
+          <a href="#" class="btn btn-primary" onclick="loadStep(1); return false;">
+            <i class="fa-solid fa-arrow-left"></i> Retour à l'étape 1
+          </a>
+        </div>
+      `).show();
+      $('#step6-loader').hide();
+      $('#step6-navigation').hide();
+      return;
+    }
+
+    // 3. Générer le HTML pour chaque adresse
+    let html = '<div class="accordion" id="accordionRecap">';
+    
+    Object.keys(config).forEach((index, i) => {
+      const adresseData = config[index];
+      const adresseInfo = adresses[index];
+      
+      html += generateRecapAdresseBlock(index, adresseData, adresseInfo, mode, engagement, i === 0);
+    });
+    
+    html += '</div>';
+
+    // 4. Injecter dans le DOM
+    $('#step6-content').html(html).show();
+    $('#step6-loader').hide();
+    $('#step6-navigation').show();
+
+    // 5. Calculer et afficher les totaux
+    updateRecapTotals();
+
+    console.log('✅ Contenu Step 6 généré avec succès');
+
+  } catch (error) {
+    console.error('❌ Erreur génération Step 6:', error);
+    $('#step6-content').html(`
+      <div class="alert alert-danger">
+        <h5><i class="fas fa-exclamation-circle me-2"></i> Erreur</h5>
+        <p>Une erreur est survenue lors du chargement du récapitulatif.</p>
+        <button class="btn btn-primary" onclick="location.reload()">
+          <i class="fa-solid fa-rotate"></i> Recharger la page
+        </button>
+      </div>
+    `).show();
+    $('#step6-loader').hide();
+  }
+}
+
+/**
+ * Génération du bloc récapitulatif pour une adresse
+ */
+function generateRecapAdresseBlock(index, data, adresseInfo, mode, engagement, isExpanded = false) {
+  const adresseNom = adresseInfo?.adresse || `Adresse ${parseInt(index) + 1}`;
+  
+  // Utiliser ville_longue si disponible, sinon extraire de l'adresse
+  let ville = adresseNom;
+  if (adresseInfo?.ville_longue) {
+    ville = adresseInfo.ville_longue;
+  } else if (typeof soeasy_get_ville_longue === 'function') {
+    ville = soeasy_get_ville_longue(adresseNom);
+  }
+  
+  let html = `
+    <div class="accordion-item">
+      <h2 class="accordion-header" id="heading-recap-${index}">
+        <button class="accordion-button ${!isExpanded ? 'collapsed' : ''}" 
+                type="button" 
+                data-bs-toggle="collapse" 
+                data-bs-target="#collapse-recap-${index}" 
+                aria-expanded="${isExpanded ? 'true' : 'false'}" 
+                aria-controls="collapse-recap-${index}">
+          <i class="fas fa-map-marker-alt me-2"></i> ${escapeHtml(ville)}
+        </button>
+      </h2>
+      <div id="collapse-recap-${index}" 
+           class="accordion-collapse collapse ${isExpanded ? 'show' : ''}" 
+           aria-labelledby="heading-recap-${index}" 
+           data-bs-parent="#accordionRecap">
+        <div class="accordion-body">
+  `;
+
+  // ABONNEMENTS
+  if (data.abonnements && data.abonnements.length > 0) {
+    html += '<div class="recap-section recap-abonnements mb-4">';
+    html += '<h5 class="section-title"><i class="fas fa-calendar-alt me-2"></i> Abonnements</h5>';
+    html += '<div class="products-grid abonnements-grid">';
+    
+    // En-tête desktop
+    const suffixHeader = (mode === 'leasing' && engagement) ? '/mois' : '';
+    html += `
+      <div class="grid-header d-none d-md-grid">
+        <div class="col-product">Produit</div>
+        <div class="col-unit-price">Prix unitaire${suffixHeader}</div>
+        <div class="col-qty justify-content-center">Qté</div>
+        <div class="col-total-price justify-content-end">Total${suffixHeader}</div>
+      </div>
+    `;
+    
+    // Produits
+    data.abonnements.forEach(item => {
+      html += generateRecapProductRow(item, mode, engagement, 'abonnement');
+    });
+    
+    html += '</div></div>';
+  }
+
+  // MATÉRIELS
+  if (data.materiels && data.materiels.length > 0) {
+    html += '<div class="recap-section recap-materiels mb-4">';
+    html += '<h5 class="section-title"><i class="fas fa-box me-2"></i> Matériels et équipements</h5>';
+    html += '<div class="products-grid materiels-grid">';
+    
+    // En-tête desktop
+    const suffixHeader = (mode === 'leasing' && engagement) ? '/mois' : '';
+    html += `
+      <div class="grid-header d-none d-md-grid">
+        <div class="col-product">Produit</div>
+        <div class="col-unit-price">Prix unitaire${suffixHeader}</div>
+        <div class="col-qty justify-content-center">Qté</div>
+        <div class="col-total-price justify-content-end">Total${suffixHeader}</div>
+      </div>
+    `;
+    
+    // Produits
+    data.materiels.forEach(item => {
+      html += generateRecapProductRow(item, mode, engagement, 'materiel');
+    });
+    
+    html += '</div></div>';
+  }
+
+  // FRAIS D'INSTALLATION
+  if (data.fraisInstallation && data.fraisInstallation.length > 0) {
+    html += '<div class="recap-section recap-frais mb-4">';
+    html += '<h5 class="section-title"><i class="fas fa-tools me-2"></i> Frais d\'installation</h5>';
+    html += '<div class="products-grid frais-grid">';
+    
+    // En-tête desktop
+    const suffixHeader = (mode === 'leasing' && engagement) ? '/mois' : '';
+    html += `
+      <div class="grid-header d-none d-md-grid">
+        <div class="col-product">Produit</div>
+        <div class="col-unit-price">Prix unitaire${suffixHeader}</div>
+        <div class="col-qty justify-content-center">Qté</div>
+        <div class="col-total-price justify-content-end">Total${suffixHeader}</div>
+      </div>
+    `;
+    
+    // Produits
+    data.fraisInstallation.forEach(item => {
+      html += generateRecapProductRow(item, mode, engagement, 'frais');
+    });
+    
+    html += '</div></div>';
+  }
+
+  // Totaux pour cette adresse
+  html += `<div class="recap-totals mt-4" id="recap-totals-${index}"></div>`;
+
+  html += `
+        </div>
+      </div>
+    </div>
+  `;
+
+  return html;
+}
+
+/**
+ * Génération d'une ligne produit dans le récap
+ */
+function generateRecapProductRow(item, mode, engagement, type) {
+  const quantite = parseInt(item.quantite) || 0;
+  
+  if (quantite === 0) return '';
+  
+  let prixUnitaire = 0;
+  let suffix = '';
+  
+  // Déterminer le prix selon type et mode
+  if (type === 'abonnement') {
+    // Abonnements : toujours prix mensuel
+    prixUnitaire = parseFloat(item.prixUnitaire) || 0;
+    suffix = ' / mois';
+  } else {
+    // Matériels et Frais : selon mode financement
+    if (mode === 'leasing' && engagement) {
+      prixUnitaire = parseFloat(
+        item[`prixLeasing${engagement}`] || 
+        item.prixLeasing36 || 
+        item.prixLeasing24 || 
+        item.prixLeasing48 ||
+        item.prixLeasing63 ||
+        0
+      );
+      suffix = ' / mois';
+    } else {
+      prixUnitaire = parseFloat(item.prixComptant) || 0;
+      suffix = '';
+    }
+  }
+  
+  const total = prixUnitaire * quantite;
+  
+  // Format des prix
+  const prixFormate = prixUnitaire.toLocaleString('fr-FR', { 
+    minimumFractionDigits: 2, 
+    maximumFractionDigits: 2 
+  });
+  const totalFormate = total.toLocaleString('fr-FR', { 
+    minimumFractionDigits: 2, 
+    maximumFractionDigits: 2 
+  });
+
+  return `
+    <div class="product-row">
+      <!-- Info produit -->
+      <div class="product-info">
+        <div class="product-name">${escapeHtml(item.nom)}</div>
+        ${item.description ? `<div class="product-description text-muted">${escapeHtml(item.description)}</div>` : ''}
+      </div>
+      
+      <!-- Desktop: colonnes -->
+      <div class="unit-price d-none d-md-block text-end">${prixFormate} €${suffix}</div>
+      <div class="quantity d-none d-md-block text-center">${quantite}</div>
+      <div class="total-price d-none d-md-block text-end fw-bold">${totalFormate} €${suffix}</div>
+      
+      <!-- Mobile: layout flexible -->
+      <div class="mobile-details d-md-none mt-2">
+        <div class="d-flex justify-content-between">
+          <span class="text-muted">Quantité :</span>
+          <span class="fw-bold">${quantite}</span>
+        </div>
+        <div class="d-flex justify-content-between">
+          <span class="text-muted">Prix unit. :</span>
+          <span>${prixFormate} €${suffix}</span>
+        </div>
+        <div class="d-flex justify-content-between">
+          <span class="text-muted">Total :</span>
+          <span class="fw-bold text-primary">${totalFormate} €${suffix}</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Mise à jour des totaux par adresse
+ */
+function updateRecapTotals() {
+  const config = JSON.parse(localStorage.getItem('soeasyConfig') || '{}');
+  const mode = getSelectedFinancementMode();
+  const engagement = getSelectedEngagement();
+
+  console.log('💰 Calcul totaux Step 6 - mode:', mode, 'engagement:', engagement);
+
+  Object.entries(config).forEach(([index, data]) => {
+    let totalComptant = 0;
+    let totalMensuel = 0;
+
+    // Abonnements (toujours mensuels)
+    (data.abonnements || []).forEach(item => {
+      const prix = parseFloat(item.prixUnitaire) || 0;
+      const qty = parseInt(item.quantite) || 0;
+      totalMensuel += prix * qty;
+    });
+
+    // Matériels
+    (data.materiels || []).forEach(item => {
+      const qty = parseInt(item.quantite) || 0;
+      
+      // Prix comptant
+      const prixComptant = parseFloat(item.prixComptant) || 0;
+      totalComptant += prixComptant * qty;
+      
+      // Prix leasing si mode leasing
+      if (mode === 'leasing' && engagement) {
+        const prixLeasing = parseFloat(item[`prixLeasing${engagement}`]) || 0;
+        totalMensuel += prixLeasing * qty;
+      }
+    });
+
+    // Frais d'installation
+    (data.fraisInstallation || []).forEach(item => {
+      const qty = parseInt(item.quantite) || 0;
+      
+      // Prix comptant
+      const prixComptant = parseFloat(item.prixComptant) || 0;
+      totalComptant += prixComptant * qty;
+      
+      // Prix leasing si mode leasing
+      if (mode === 'leasing' && engagement) {
+        const prixLeasing = parseFloat(item[`prixLeasing${engagement}`]) || 0;
+        totalMensuel += prixLeasing * qty;
+      }
+    });
+
+    console.log(`  📊 Adresse ${index}: Mensuel=${totalMensuel}€, Comptant=${totalComptant}€`);
+
+    // Affichage des totaux
+    const $container = $(`#recap-totals-${index}`);
+    $container.empty();
+
+    if (mode === 'leasing' && engagement) {
+      // Mode leasing : afficher mensuel total + détail comptant
+      $container.append(`
+        <div class="d-flex justify-content-between align-items-center p-3 bg-light rounded">
+          <div>
+            <div class="fw-bold text-primary fs-5">
+              Total mensuel (abonnements + leasing) : 
+              ${totalMensuel.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} € / mois
+            </div>
+            <div class="text-muted mt-1">
+              ou total équipements comptant : 
+              ${totalComptant.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €
+            </div>
+          </div>
+        </div>
+      `);
+    } else {
+      // Mode comptant : afficher séparément
+      $container.append(`
+        <div class="p-3 bg-light rounded">
+          <div class="d-flex justify-content-between mb-2">
+            <span class="fw-bold">Total abonnements mensuels :</span>
+            <span class="text-primary fw-bold">${totalMensuel.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} € / mois</span>
+          </div>
+          <div class="d-flex justify-content-between">
+            <span class="fw-bold">Total équipements :</span>
+            <span class="text-primary fw-bold fs-5">${totalComptant.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €</span>
+          </div>
+        </div>
+      `);
+    }
+  });
+}
+
+// Exposer les fonctions globalement
+window.generateStep6Content = generateStep6Content;
+window.updateRecapTotals = updateRecapTotals;
+
 });

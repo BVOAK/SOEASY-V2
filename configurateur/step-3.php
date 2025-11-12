@@ -105,10 +105,10 @@ $equipements_mobile = soeasy_session_get('soeasy_equipements_mobile', []);
                   <div class="item-product" data-prix-leasing-0="<?php echo esc_attr($prix); ?>" <?php echo $data_attrs; ?>>
                     <div class="col-md-6 checkbox-wrapper">
                       <input class="form-check-input forfait-checkbox mobile-checkbox inp-cbx" type="checkbox"
-                        data-type="mobile" id="forfait-checkbox-<?php echo $product_id; ?>"
+                        data-type="mobile" id="forfait-checkbox-<?php echo $product_id; ?>-<?php echo $i; ?>"
                         data-id="<?php echo $product_id; ?>" data-index="<?php echo $i; ?>" <?php echo $checked; ?>
                         style="display: none;" />
-                      <label class="cbx" for="forfait-checkbox-<?php echo $product_id; ?>">
+                      <label class="cbx" for="forfait-checkbox-<?php echo $product_id; ?>-<?php echo $i; ?>">
                         <span>
                           <svg width="12px" height="9px" viewbox="0 0 12 9">
                             <polyline points="1 5 4 8 11 1"></polyline>
@@ -203,9 +203,9 @@ $equipements_mobile = soeasy_session_get('soeasy_equipements_mobile', []);
                   <div class="item-product" data-prix-leasing-0="<?php echo esc_attr($prix); ?>" <?php echo $data_attrs; ?>>
                     <div class="col-md-6 checkbox-wrapper">
                       <input class="form-check-input forfait-checkbox mobile-checkbox inp-cbx" type="checkbox"
-                        id="data-checkbox-<?php echo $product_id; ?>" data-type="data" data-id="<?php echo $product_id; ?>"
+                        id="data-checkbox-<?php echo $product_id; ?>-<?php echo $i; ?>" data-type="data" data-id="<?php echo $product_id; ?>"
                         data-index="<?php echo $i; ?>" <?php echo $checked; ?> style="display: none;" />
-                      <label class="cbx" for="data-checkbox-<?php echo $product_id; ?>">
+                      <label class="cbx" for="data-checkbox-<?php echo $product_id; ?>-<?php echo $i; ?>">
                         <span>
                           <svg width="12px" height="9px" viewbox="0 0 12 9">
                             <polyline points="1 5 4 8 11 1"></polyline>
@@ -283,10 +283,10 @@ $equipements_mobile = soeasy_session_get('soeasy_equipements_mobile', []);
                   <div class="item-product" <?php echo $data_attrs; ?>>
                     <div class="col-md-6 checkbox-wrapper">
                       <input class="form-check-input forfait-checkbox mobile-checkbox inp-cbx" type="checkbox"
-                        id="equipement-checkbox-<?php echo $product_id; ?>" data-type="equipement"
+                        id="equipement-checkbox-<?php echo $product_id; ?>-<?php echo $i; ?>" data-type="equipement"
                         data-id="<?php echo $product_id; ?>" data-index="<?php echo $i; ?>" <?php echo $checked; ?>
                         style="display: none;" />
-                      <label class="cbx" for="equipement-checkbox-<?php echo $product_id; ?>">
+                      <label class="cbx" for="equipement-checkbox-<?php echo $product_id; ?>-<?php echo $i; ?>">
                         <span>
                           <svg width="12px" height="9px" viewbox="0 0 12 9">
                             <polyline points="1 5 4 8 11 1"></polyline>

@@ -286,7 +286,7 @@ jQuery(document).ready(function ($) {
   // 1. Checkbox cochée/décochée → synchroniser quantité et recalculer
   $(document).on('change', '.forfait-checkbox:not(.step-3 *, .step-4 *), .equipement-checkbox:not(.step-3 *, .step-4 *), .centrex-checkbox:not(.step-3 *, .step-4 *), .mobile-checkbox:not(.step-3 *, .step-4 *)', function () {
     const $checkbox = $(this);
-    const $input = $checkbox.closest('.item-product').find('.input-qty');
+    const $input = $checkbox.closest('.border').find('.input-qty');
 
     if ($checkbox.is(':checked')) {
       // Si coché et quantité = 0, mettre à 1
@@ -307,7 +307,7 @@ jQuery(document).ready(function ($) {
   // 2. Input quantité modifiée → synchroniser checkbox et recalculer
   $(document).on('input change', '.input-qty:not(.step-3 *, .step-4 *)', function () {
     const $input = $(this);
-    const $checkbox = $input.closest('.item-product').find('.forfait-checkbox, .equipement-checkbox, .centrex-checkbox, .mobile-checkbox');
+    const $checkbox = $input.closest('.border').find('.forfait-checkbox, .equipement-checkbox, .centrex-checkbox, .mobile-checkbox');
     const quantity = parseInt($input.val()) || 0;
 
     // Synchroniser checkbox avec quantité
@@ -813,6 +813,7 @@ jQuery(document).ready(function ($) {
       $(`input[name="equipement_${index}[]"]`).each(function () {
         const $checkbox = $(this);
         const $label = $checkbox.closest('label');
+        console.log("On change !")
         const id = $checkbox.data('id');
 
         const isVisible = $checkbox.closest('.equipement').is(':visible');
@@ -902,8 +903,7 @@ jQuery(document).ready(function ($) {
       const qty = parseInt($input.val()) || 0;
       const index = $input.data('index');
       const id = $input.data('id');
-      
-      const $checkbox = $input.closest('.item-product').find(`.forfait-checkbox[data-id="${id}"], .mobile-checkbox[data-id="${id}"]`);
+      const $checkbox = $(`.forfait-checkbox[data-id="${id}"][data-index="${index}"]`);
 
       $checkbox.prop('checked', qty > 0);
 
@@ -925,12 +925,11 @@ jQuery(document).ready(function ($) {
     });
 
     $(document).on('change', '.step-3 .forfait-checkbox', function () {
-      const $checkbox = $(this);
-      const index = $checkbox.data('index');
-      const id = $checkbox.data('id');
+      const index = $(this).data('index');
+      const id = $(this).data('id');
       const $input = $(`.input-qty[data-id="${id}"][data-index="${index}"]`);
 
-      if ($checkbox.is(':checked')) {
+      if ($(this).is(':checked')) {
         if (parseInt($input.val()) === 0) {
           $input.val(1).trigger('change');
         }
@@ -940,7 +939,7 @@ jQuery(document).ready(function ($) {
     });
 
     function resetAllStep3CheckboxesAndInputs() {
-      $('.step-3 .forfait-checkbox, .step-3 .mobile-checkbox').prop('checked', false);
+      $('.step-3 .forfait-checkbox').prop('checked', false);
       $('.step-3 .input-qty').val(0);
     }
 
@@ -956,7 +955,7 @@ jQuery(document).ready(function ($) {
 
         allProduits.forEach(prod => {
           const $input = $(`.step-3 .input-qty[data-index="${index}"][data-id="${prod.id}"]`);
-          const $checkbox = $(`.step-3 .forfait-checkbox[data-index="${index}"][data-id="${prod.id}"], .step-3 .mobile-checkbox[data-index="${index}"][data-id="${prod.id}"]`);
+          const $checkbox = $(`.step-3 .forfait-checkbox[data-index="${index}"][data-id="${prod.id}"]`);
 
           if ($input.length) $input.val(prod.quantite);
           if ($checkbox.length) $checkbox.prop('checked', prod.quantite > 0);
@@ -1535,38 +1534,104 @@ jQuery(document).ready(function ($) {
    * Initialisation des événements de l'étape 6 (Récapitulatif final)
    */
 
-window.initStep6Events = function () {
-  console.log('🎯 Initialisation Step 6 Events avec localStorage');
+  window.initStep6Events = function () {
 
-  // 1. Génération immédiate du contenu
-  if (typeof generateStep6Content === 'function') {
-    generateStep6Content();
-  } else {
-    console.error('❌ Fonction generateStep6Content non trouvée');
-    $('#step6-loader').hide();
-    $('#step6-content').html(`
-      <div class="alert alert-danger">
-        <h5>Erreur de chargement</h5>
-        <p>Une fonction JavaScript est manquante. Veuillez recharger la page.</p>
-        <button class="btn btn-primary" onclick="location.reload()">Recharger</button>
-      </div>
-    `).show();
-  }
+    // 1. Forcer la mise à jour immédiate des prix
+    updatePrices();
 
-  // 2. Événement bouton "Commander" (Ajouter au panier)
-  $(document).off('click', '#btn-commander').on('click', '#btn-commander', function(e) {
-    e.preventDefault();
-    
-    if (typeof sendToCart === 'function') {
-      sendToCart();
-    } else {
-      console.error('❌ Fonction sendToCart non trouvée');
-      alert('Erreur technique. La fonction de commande n\'est pas disponible.');
-    }
-  });
+    // 2. Générer le contenu des tableaux
+    setTimeout(() => {
+      updateRecapitulatif();
+      updateRecapTotals();
+      updateSidebarTotauxRecap();
+    }, 100);
 
-  console.log('✅ Step 6 Events initialisés');
-};
+    // 3. Calcul et affichage des totaux par adresse
+    const config = JSON.parse(localStorage.getItem('soeasyConfig')) || {};
+    const adresses = JSON.parse(localStorage.getItem('soeasyAdresses')) || [];
+    const mode = getSelectedFinancementMode();
+    const engagement = getSelectedEngagement();
+
+    Object.entries(config).forEach(([index, data]) => {
+      let totalComptant = 0;
+      let totalMensuel = 0;
+
+      // 3a. Abonnements (toujours mensuels)
+      (data.abonnements || []).forEach(item => {
+        const prix = parseFloat(item.prixUnitaire) || 0;
+        const qty = parseInt(item.quantite) || 0;
+        totalMensuel += prix * qty;
+      });
+
+      // 3b. Matériels
+      (data.materiels || []).forEach(item => {
+        const qty = parseInt(item.quantite) || 0;
+
+        // Prix comptant toujours calculé
+        const prixComptant = parseFloat(item.prixComptant) || 0;
+        totalComptant += prixComptant * qty;
+
+        // Prix leasing si mode leasing
+        if (mode === 'leasing' && engagement) {
+          const prixLeasing = parseFloat(item[`prixLeasing${engagement}`]) || 0;
+          totalMensuel += prixLeasing * qty;
+        }
+      });
+
+      // 3c. Frais d'installation
+      (data.fraisInstallation || []).forEach(item => {
+        const qty = parseInt(item.quantite) || 0;
+
+        // Prix comptant toujours calculé
+        const prixComptant = parseFloat(item.prixComptant) || 0;
+        totalComptant += prixComptant * qty;
+
+        // Prix leasing si mode leasing
+        if (mode === 'leasing' && engagement) {
+          const prixLeasing = parseFloat(item[`prixLeasing${engagement}`]) || 0;
+          totalMensuel += prixLeasing * qty;
+        }
+      });
+
+      // 3d. Affichage des totaux dans l'accordion de l'adresse
+      const $accordionBody = $(`#collapse-${index} .accordion-body`);
+
+      // Supprimer les anciens totaux s'ils existent
+      $accordionBody.find('.totaux-adresse').remove();
+
+      // Ajouter les nouveaux totaux
+      const $totauxDiv = $('<div class="totaux-adresse d-flex flex-column align-items-end mb-4"></div>');
+
+      if (mode === 'comptant') {
+        $totauxDiv.append(`
+            <div><small>Total mensuel (abonnements) : </small><strong>${totalMensuel.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} € / mois</strong></div>
+            <div><small>Total comptant (équipements + frais) : </small><strong>${totalComptant.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €</strong></div>
+        
+      `);
+      } else {
+        $totauxDiv.append(`
+        <div class="text-center">
+          <strong>Total mensuel : ${totalMensuel.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} € / mois</strong>
+        </div>
+      `);
+      }
+
+      $accordionBody.append($totauxDiv);
+    });
+
+    // 4. Gestion du bouton "Valider ma configuration"
+    $(document).off('click', '#btn-commander').on('click', '#btn-commander', function (e) {
+      e.preventDefault();
+
+      if (typeof sendToCart === 'function') {
+        sendToCart();
+      } else {
+        console.warn('⚠️ Fonction sendToCart non trouvée');
+        alert('Fonction de validation non disponible');
+      }
+    });
+
+  };
 
   /**
  * =============================================================================

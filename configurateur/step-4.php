@@ -109,9 +109,9 @@ $accessoires = soeasy_session_get('soeasy_accessoires_centrex', []);
                   <div class="item-product" data-prix-leasing-0="<?php echo esc_attr($prix); ?>" <?php echo $data_attrs; ?>>
                     <div class="col-md-6 checkbox-wrapper">
                       <input class="form-check-input centrex-checkbox inp-cbx" type="checkbox" data-type="forfait"
-                        id="licence-checkbox-<?php echo $product_id; ?>" data-id="<?php echo $product_id; ?>"
+                        id="licence-checkbox-<?php echo $product_id; ?>-<?php echo $i; ?>" data-id="<?php echo $product_id; ?>"
                         data-index="<?php echo $i; ?>" <?php echo $checked; ?> style="display: none;" />
-                      <label class="cbx" for="licence-checkbox-<?php echo $product_id; ?>">
+                      <label class="cbx" for="licence-checkbox-<?php echo $product_id; ?>-<?php echo $i; ?>">
                         <span>
                           <svg width="12px" height="9px" viewbox="0 0 12 9">
                             <polyline points="1 5 4 8 11 1"></polyline>
@@ -189,9 +189,9 @@ $accessoires = soeasy_session_get('soeasy_accessoires_centrex', []);
                   <div class="item-product" data-prix-leasing-0="<?php echo esc_attr($prix); ?>" <?php echo $data_attrs; ?>>
                     <div class="col-md-6 checkbox-wrapper">
                       <input class="form-check-input centrex-checkbox inp-cbx" type="checkbox" data-type="equipement"
-                        id="service-checkbox-<?php echo $product_id; ?>" data-id="<?php echo $product_id; ?>"
+                        id="service-checkbox-<?php echo $product_id; ?>-<?php echo $i; ?>" data-id="<?php echo $product_id; ?>"
                         data-index="<?php echo $i; ?>" <?php echo $checked; ?> style="display: none;" />
-                      <label class="cbx" for="service-checkbox-<?php echo $product_id; ?>">
+                      <label class="cbx" for="service-checkbox-<?php echo $product_id; ?>-<?php echo $i; ?>">
                         <span>
                           <svg width="12px" height="9px" viewbox="0 0 12 9">
                             <polyline points="1 5 4 8 11 1"></polyline>
@@ -271,9 +271,9 @@ $accessoires = soeasy_session_get('soeasy_accessoires_centrex', []);
                   <div class="item-product" <?php echo $data_attrs; ?>>
                     <div class="col-md-6 checkbox-wrapper">
                       <input class="form-check-input centrex-checkbox inp-cbx" type="checkbox" data-type="equipement"
-                        id="poste-checkbox-<?php echo $product_id; ?>" data-id="<?php echo $product_id; ?>"
+                        id="poste-checkbox-<?php echo $product_id; ?>-<?php echo $i; ?>" data-id="<?php echo $product_id; ?>"
                         data-index="<?php echo $i; ?>" <?php echo $checked; ?> style="display: none;" />
-                      <label class="cbx" for="poste-checkbox-<?php echo $product_id; ?>">
+                      <label class="cbx" for="poste-checkbox-<?php echo $product_id; ?>-<?php echo $i; ?>">
                         <span>
                           <svg width="12px" height="9px" viewbox="0 0 12 9">
                             <polyline points="1 5 4 8 11 1"></polyline>
@@ -356,10 +356,10 @@ $accessoires = soeasy_session_get('soeasy_accessoires_centrex', []);
                   <div class="item-product blocSwitch" <?php echo $data_attrs; ?>>
                     <div class="col-md-6 checkbox-wrapper">
                       <input class="form-check-input centrex-checkbox inp-cbx" type="checkbox" data-type="equipement"
-                        id="switch-checkbox-<?php echo $product_id; ?>" data-role="switch-centrex"
+                        id="switch-checkbox-<?php echo $product_id; ?>-<?php echo $i; ?>" data-role="switch-centrex"
                         data-id="<?php echo $product_id; ?>" data-index="<?php echo $i; ?>"
                         data-nombre-ports="<?= $nombre_ports; ?>" <?php echo $checked; ?> style="display: none;" />
-                      <label class="cbx" for="switch-checkbox-<?php echo $product_id; ?>">
+                      <label class="cbx" for="switch-checkbox-<?php echo $product_id; ?>-<?php echo $i; ?>">
                         <span>
                           <svg width="12px" height="9px" viewbox="0 0 12 9">
                             <polyline points="1 5 4 8 11 1"></polyline>
@@ -441,10 +441,10 @@ $accessoires = soeasy_session_get('soeasy_accessoires_centrex', []);
                   <div class="item-product" <?php echo $data_attrs; ?>>
                     <div class="col-md-6 checkbox-wrapper">
                       <input class="form-check-input centrex-checkbox inp-cbx" type="checkbox" data-type="equipement"
-                        id="accessoire-checkbox-<?php echo $product_id; ?>" data-role="switch-centrex"
+                        id="accessoire-checkbox-<?php echo $product_id; ?>-<?php echo $i; ?>" data-role="switch-centrex"
                         data-id="<?php echo $product_id; ?>" data-index="<?php echo $i; ?>"
                         data-nombre-ports="<?= $nombre_ports; ?>" <?php echo $checked; ?> style="display: none;" />
-                      <label class="cbx" for="accessoire-checkbox-<?php echo $product_id; ?>">
+                      <label class="cbx" for="accessoire-checkbox-<?php echo $product_id; ?>-<?php echo $i; ?>">
                         <span>
                           <svg width="12px" height="9px" viewbox="0 0 12 9">
                             <polyline points="1 5 4 8 11 1"></polyline>
