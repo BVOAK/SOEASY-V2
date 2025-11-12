@@ -1,0 +1,511 @@
+/******* VARIABLES *******/
+:root {
+  --se-dark: #0d0015;
+  --se-violet: #28004f;
+  --se-violet-clair: #761dbc;
+  --se-mauve: #d9a9fb;
+  --se-mauve-clair: #f2e5ff;
+  --se-orange: #f6921e;
+  --se-gris: #666666;
+  --se-gris-clair: #e5e5e5;
+  --se-rouge: #f34336;
+  --se-green: #63bc1d;
+  --se-blue: #3fa8f4;
+  /*var(--se-violet);*/
+}
+
+
+/* =============================================================================
+   PANIER SOEASY - STYLES PERSONNALISÉS
+   ============================================================================= */
+
+.soeasy-cart-container {
+    padding: 2rem 0;
+    min-height: 60vh;
+    background: rgba(229, 229, 229, 0.4);
+}
+
+/* Titre principal */
+.cart-title {
+    font-size: 3rem;
+    font-weight: 400;
+    color: var(--se-violet);
+}
+
+/* =============================================================================
+   CONFIGURATIONS PAR ADRESSE
+   ============================================================================= */
+
+.configuration-group {
+    background: white;
+    border: none!important;
+}
+
+.configuration-group .img-product {
+    background-color: var(--se-violet);
+    width: 100%;
+    aspect-ratio: 1/1;
+    border-radius: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.config-info p, .config-info p a {
+    margin-bottom: 0;
+    font-size: 1rem;
+    color: var(--se-violet);
+}
+
+.address-info i {
+    color: var(--se-orange);
+}
+
+.financing-info, .first-payment-info {
+    font-size: 0.8rem;
+    color: var(--se-gris);
+}
+
+.contract-info {
+    font-size: 0.8rem;
+    color: var(--se-gris);
+}
+
+.btn-details {
+    background: white!important;
+    border: 1px solid var(--se-gris-clair)!important;
+    padding: 10px 20px!important;
+    color: var(--se-gris)!important;
+    font-size: 0.8rem!important;
+}
+
+.btn-details i{
+    color: var(--se-violet)!important;
+}
+
+.btn-remove {
+    background: white!important;
+    padding: 0px!important;
+    color: var(--se-rouge)!important;
+}
+
+.config-price {
+    color: var(--se-violet);
+    font-size: 1.2rem;
+}
+
+.config-actions .btn {
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
+}
+
+.config-actions .btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.5);
+    color: white;
+    transform: translateY(-1px);
+}
+
+.config-actions .btn-outline-danger:hover {
+    background: rgba(239, 68, 68, 0.9);
+    border-color: #ef4444;
+}
+
+/* =============================================================================
+   PRODUITS CLASSIQUES
+   ============================================================================= */
+
+.classic-products-section {
+    background: white;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.1);
+}
+
+.shop_table {
+    margin-bottom: 0;
+    border: none;
+}
+
+.shop_table th {
+    background: #f8f9fc;
+    border: none;
+    padding: 1rem;
+    font-weight: 600;
+    color: #5a5c69;
+    font-size: 0.9rem;
+}
+
+.shop_table td {
+    border: none;
+    padding: 1rem;
+    vertical-align: middle;
+    border-bottom: 1px solid #e3e6f0;
+}
+
+.shop_table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.product-remove a {
+    color: #e74a3b;
+    font-size: 1.1rem;
+    padding: 0.5rem;
+    border-radius: 50%;
+    width: 2rem;
+    height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.product-remove a:hover {
+    background: #e74a3b;
+    color: white;
+    transform: scale(1.1);
+}
+
+.product-thumbnail img {
+    border-radius: 0.5rem;
+    max-width: 60px;
+    height: auto;
+}
+
+.cart-actions {
+    text-align: right;
+    padding-top: 1rem;
+    border-top: 1px solid #e3e6f0;
+}
+
+/* =============================================================================
+   SIDEBAR TOTAUX
+   ============================================================================= */
+
+.cart-sidebar {
+    top: 2rem;
+}
+
+.cart-summary {
+    background: white;
+    border-radius: 10px;
+    padding: 1.5rem;
+}
+
+.summary-title {
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e3e6f0;
+}
+
+.coupon-section .form-control {
+    border: 1px solid var(--se-violet-clair)!important;
+    border-radius: 0.5rem;
+    padding: 0.4rem 1rem;
+    font-size: 0.8rem;
+}
+
+.coupon-section .btn {
+    white-space: nowrap;
+    font-size: 0.8rem;
+    padding: 0.4rem 1rem;
+}
+
+/* Styles WooCommerce totaux */
+.cart-collaterals .cart_totals {
+    padding: 0;
+    border: none;
+}
+
+.cart-collaterals .cart_totals h2 {
+    display: none;
+}
+
+.cart-collaterals table {
+    margin: 0;
+    border: none;
+}
+
+.cart-collaterals table th,
+.cart-collaterals table td {
+    border: none;
+    padding: 0.75rem 0;
+    font-size: 0.95rem;
+}
+
+.cart-collaterals table th {
+    font-weight: 500;
+    color: #5a5c69;
+}
+
+.cart-collaterals table .order-total th,
+.cart-collaterals table .order-total td {
+    font-weight: 600;
+    font-size: 1.1rem;
+    padding-top: 1rem;
+    border-top: 2px solid #6366f1;
+    color: #6366f1;
+}
+
+.wc-proceed-to-checkout {
+    margin-top: 1.5rem;
+}
+
+.wc-proceed-to-checkout .checkout-button {
+    width: 100%;
+    border: none;
+    padding: 0.8rem 1rem!important;
+    font-size: 1rem!important;
+    font-weight: 600;
+    border-radius: 50px;
+    color: white;
+    transition: all 0.3s ease;
+    background: var(--se-violet);
+    text-decoration: none;
+}
+
+.wc-proceed-to-checkout .checkout-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+}
+
+/* =============================================================================
+   ICÔNES DE CONFIANCE
+   ============================================================================= */
+
+.trust-icons {
+    background: #f8f9fc;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid #e3e6f0;
+}
+
+.trust-item i {
+    font-size: 1.2rem;
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.trust-item small {
+    font-size: 0.75rem;
+    color: #5a5c69;
+    line-height: 1.2;
+}
+
+.payment-methods img {
+    max-height: 24px;
+    opacity: 0.8;
+}
+
+/* =============================================================================
+   PANIER VIDE
+   ============================================================================= */
+
+.cart-empty {
+    background: white;
+    border-radius: 0.75rem;
+    padding: 3rem 2rem;
+    box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.1);
+}
+
+.cart-empty i {
+    opacity: 0.5;
+}
+
+.cart-empty h4 {
+    color: #2c3e50;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.cart-empty p {
+    font-size: 1.1rem;
+    margin-bottom: 2rem;
+}
+
+/* =============================================================================
+   MODALS
+   ============================================================================= */
+
+.modal-header {
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    color: white;
+    border-bottom: none;
+}
+
+.modal-header .btn-close {
+    filter: invert(1);
+    opacity: 0.8;
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.modal-footer {
+    border-top: 1px solid #e3e6f0;
+    padding: 1rem 1.5rem;
+}
+
+/* =============================================================================
+   RESPONSIVE
+   ============================================================================= */
+
+@media (max-width: 991.98px) {
+    .soeasy-cart-container {
+        padding: 1rem 0;
+    }
+    
+    .cart-title {
+        font-size: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .config-header {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 1rem;
+    }
+    
+    .config-actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    .cart-sidebar {
+        margin-top: 2rem;
+        position: static !important;
+    }
+    
+    .shop_table,
+    .shop_table thead,
+    .shop_table tbody,
+    .shop_table th,
+    .shop_table td,
+    .shop_table tr {
+        display: block;
+    }
+    
+    .shop_table thead tr {
+        position: absolute;
+        top: -9999px;
+        left: -9999px;
+    }
+    
+    .shop_table tr {
+        border: 1px solid #e3e6f0;
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+        padding: 1rem;
+    }
+    
+    .shop_table td {
+        border: none !important;
+        padding: 0.5rem 0;
+        position: relative;
+        padding-left: 50% !important;
+        text-align: right;
+    }
+    
+    .shop_table td:before {
+        content: attr(data-title);
+        position: absolute;
+        left: 0;
+        width: 45%;
+        padding-right: 10px;
+        white-space: nowrap;
+        font-weight: 600;
+        color: #5a5c69;
+        text-align: left;
+    }
+    
+    .product-remove,
+    .product-thumbnail {
+        text-align: center !important;
+        padding-left: 0 !important;
+    }
+    
+    .product-remove:before,
+    .product-thumbnail:before {
+        display: none;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .config-actions .btn {
+        font-size: 0.8rem;
+        padding: 0.4rem 0.8rem;
+    }
+    
+    .config-price {
+        padding: 0.4rem 0.8rem;
+    }
+    
+    .trust-icons .col-4 {
+        margin-bottom: 1rem;
+    }
+}
+
+/* =============================================================================
+   ANIMATIONS ET TRANSITIONS
+   ============================================================================= */
+
+.configuration-group,
+.classic-products-section,
+.cart-summary {
+    animation: fadeInUp 0.6s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.config-actions .btn,
+.product-remove a,
+.wc-proceed-to-checkout .checkout-button {
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* =============================================================================
+   ÉTATS DE CHARGEMENT
+   ============================================================================= */
+
+.loading {
+    opacity: 0.6;
+    pointer-events: none;
+    position: relative;
+}
+
+.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #6366f1;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
