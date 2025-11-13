@@ -225,7 +225,7 @@ $adresses = soeasy_get_adresses_configurateur();
                   ?>
                   <div class="equipement p-0" data-equipement-index="<?= $i; ?>" data-id="<?= $product_id; ?>">
                     <label class="item-product" data-prix-comptant="<?php echo esc_attr($prix_comptant); ?>" 
-                      <?php foreach ([0, 24, 36, 48, 63] as $d): ?>data-prix-leasing-<?php echo $d; ?>="<?php echo esc_attr($prix_leasing_map[$d]); ?>"<?php endforeach; ?>>
+                      <?php foreach ([0, 24, 36, 48, 63] as $d): ?> data-prix-leasing-<?php echo $d; ?>="<?php echo esc_attr($prix_leasing_map[$d]); ?>"<?php endforeach; ?>>
                       <div class="col checkbox-wrapper">
                         <input type="checkbox" name="equipement_<?php echo $i; ?>[]" value="<?php echo $product_id; ?>"
                           class="me-2 equipement-checkbox inp-cbx" data-index="<?php echo $i; ?>" data-id="<?= $product_id; ?>"

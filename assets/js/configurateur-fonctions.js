@@ -96,7 +96,7 @@ function getAdresseByIndex(index) {
 * Met à jour dynamiquement le prix total affiché
 */
 function updatePrixTotal($input) {
-  const $container = $input.closest('.border, .list-group-item, [data-prix-comptant], [data-prix-leasing-24]');
+  const $container = $input.closest('.item-product, .list-group-item, [data-prix-comptant], [data-prix-leasing-24]');
   const qty = parseInt($input.val()) || 0;
 
   // Prix unitaire depuis data-unit (mis à jour par updatePrices)
@@ -139,6 +139,8 @@ function updateAllPrixTotaux() {
 }
 
 // Calcul total global si souhaité
+// Dans configurateur-fonctions.js
+
 function saveToLocalConfig(adresseId, section, nouveauxProduits, options = {}) {
   const key = 'soeasyConfig';
   const config = JSON.parse(localStorage.getItem(key)) || {};
@@ -150,6 +152,7 @@ function saveToLocalConfig(adresseId, section, nouveauxProduits, options = {}) {
   let fusionnes = [];
 
   if (options.replace === true && options.type) {
+    console.log(`🔄 Replace mode avec type: ${options.type}`);
     fusionnes = existants.filter(p => p.type !== options.type);
   } else {
     fusionnes = [...existants];
@@ -160,6 +163,7 @@ function saveToLocalConfig(adresseId, section, nouveauxProduits, options = {}) {
     const key = p.id || p.nom;
     indexés[key] = p;
   });
+
   if (Array.isArray(nouveauxProduits)) {
     nouveauxProduits.forEach(p => {
       const key = p.id || p.nom;
@@ -170,20 +174,43 @@ function saveToLocalConfig(adresseId, section, nouveauxProduits, options = {}) {
   config[adresseId][section] = Object.values(indexés);
   localStorage.setItem(key, JSON.stringify(config));
 
+  // Envoi AJAX
   jQuery.post(soeasyVars.ajaxurl, {
     action: 'soeasy_set_config_part',
     index: adresseId,
     key: section,
-    items: config[adresseId][section]
+    items: config[adresseId][section],
+    nonce: soeasyVars.nonce_config
   });
 
   if (section === 'fraisInstallation') {
     jQuery.post(soeasyVars.ajaxurl, {
       action: 'soeasy_set_frais_installation',
       index: adresseId,
-      items: config[adresseId][section]
+      items: config[adresseId][section],
+      nonce: soeasyVars.nonce_config
     });
   }
+
+  // 🆕 NOTIFICATION SIDEBAR (si besoin)
+  if (options.notifyChange !== false) {
+    notifySidebarProductAdded();
+  }
+
+  console.log(`✅ saveToLocalConfig terminé pour index ${adresseId}, section ${section}`);
+}
+
+// Notification automatique quand un produit est ajouté
+function notifySidebarProductAdded() {
+  // Déclencher l'event pour auto-ouvrir la sidebar
+  document.dispatchEvent(new CustomEvent('productAddedToConfig'));
+
+  // Mettre à jour le compteur
+  setTimeout(() => {
+    if (window.sidebarManager && typeof window.sidebarManager.updateCartCount === 'function') {
+      window.sidebarManager.updateCartCount();
+    }
+  }, 100);
 }
 
 
@@ -458,122 +485,122 @@ jQuery(document).ready(function ($) {
   }
 
   // Mise en forme du récap de l'étape 6
-function updateRecapitulatif() {
-  console.log('🔄 updateRecapitulatif() - Version responsive avec logique prix corrigée');
+  function updateRecapitulatif() {
+    console.log('🔄 updateRecapitulatif() - Version responsive avec logique prix corrigée');
 
-  const recapData = JSON.parse(localStorage.getItem('soeasyConfig')) || {};
-  const mode = getSelectedFinancementMode();
-  const engagement = getSelectedEngagement();
+    const recapData = JSON.parse(localStorage.getItem('soeasyConfig')) || {};
+    const mode = getSelectedFinancementMode();
+    const engagement = getSelectedEngagement();
 
-  console.log(`📋 Mode: ${mode}, Engagement: ${engagement} mois`);
+    console.log(`📋 Mode: ${mode}, Engagement: ${engagement} mois`);
 
-  if (Object.keys(recapData).length === 0) {
-    console.log('⚠️ Aucune configuration trouvée');
-    return;
+    if (Object.keys(recapData).length === 0) {
+      console.log('⚠️ Aucune configuration trouvée');
+      return;
+    }
+
+    Object.entries(recapData).forEach(([adresseId, data]) => {
+      console.log(`📋 Génération récap pour adresse ${adresseId}:`, data);
+
+      // 1. ✅ ABONNEMENTS
+      const $abonnementsContainer = $(`#collapse-${adresseId} .abonnements-grid .products-list`);
+      $abonnementsContainer.empty();
+
+      if (data.abonnements && data.abonnements.length > 0) {
+        data.abonnements.forEach(item => {
+          $abonnementsContainer.append(generateProductRowCorrect(item, 'abonnement', mode, engagement));
+        });
+      } else {
+        $abonnementsContainer.append('<div class="no-products">Aucun abonnement sélectionné</div>');
+      }
+
+      // 2. ✅ MATÉRIELS  
+      const $materielsContainer = $(`#collapse-${adresseId} .materiels-grid .products-list`);
+      $materielsContainer.empty();
+
+      if (data.materiels && data.materiels.length > 0) {
+        data.materiels.forEach(item => {
+          $materielsContainer.append(generateProductRowCorrect(item, 'materiel', mode, engagement));
+        });
+      } else {
+        $materielsContainer.append('<div class="no-products">Aucun matériel sélectionné</div>');
+      }
+
+      // 3. ✅ FRAIS D'INSTALLATION
+      const $installationsContainer = $(`#collapse-${adresseId} .installations-grid .products-list`);
+      $installationsContainer.empty();
+
+      if (data.fraisInstallation && data.fraisInstallation.length > 0) {
+        data.fraisInstallation.forEach(item => {
+          $installationsContainer.append(generateProductRowCorrect(item, 'frais', mode, engagement));
+        });
+      } else {
+        $installationsContainer.append('<div class="no-products">Aucun frais d\'installation</div>');
+      }
+    });
+
+    console.log('✅ Récapitulatif responsive généré avec prix corrects');
   }
-
-  Object.entries(recapData).forEach(([adresseId, data]) => {
-    console.log(`📋 Génération récap pour adresse ${adresseId}:`, data);
-
-    // 1. ✅ ABONNEMENTS
-    const $abonnementsContainer = $(`#collapse-${adresseId} .abonnements-grid .products-list`);
-    $abonnementsContainer.empty();
-    
-    if (data.abonnements && data.abonnements.length > 0) {
-      data.abonnements.forEach(item => {
-        $abonnementsContainer.append(generateProductRowCorrect(item, 'abonnement', mode, engagement));
-      });
-    } else {
-      $abonnementsContainer.append('<div class="no-products">Aucun abonnement sélectionné</div>');
-    }
-
-    // 2. ✅ MATÉRIELS  
-    const $materielsContainer = $(`#collapse-${adresseId} .materiels-grid .products-list`);
-    $materielsContainer.empty();
-    
-    if (data.materiels && data.materiels.length > 0) {
-      data.materiels.forEach(item => {
-        $materielsContainer.append(generateProductRowCorrect(item, 'materiel', mode, engagement));
-      });
-    } else {
-      $materielsContainer.append('<div class="no-products">Aucun matériel sélectionné</div>');
-    }
-
-    // 3. ✅ FRAIS D'INSTALLATION
-    const $installationsContainer = $(`#collapse-${adresseId} .installations-grid .products-list`);
-    $installationsContainer.empty();
-    
-    if (data.fraisInstallation && data.fraisInstallation.length > 0) {
-      data.fraisInstallation.forEach(item => {
-        $installationsContainer.append(generateProductRowCorrect(item, 'frais', mode, engagement));
-      });
-    } else {
-      $installationsContainer.append('<div class="no-products">Aucun frais d\'installation</div>');
-    }
-  });
-
-  console.log('✅ Récapitulatif responsive généré avec prix corrects');
-}
 
 
   /**
    * ✅ NOUVELLE fonction : Génère une ligne de produit responsive
    */
   function generateProductRowCorrect(item, type, mode, engagement) {
-  const quantite = parseInt(item.quantite) || 0;
-  
-  // ✅ CORRECTION : Logique prix selon le type et mode (comme l'ancien code)
-  let prixUnitaire = 0;
-  let suffix = '';
+    const quantite = parseInt(item.quantite) || 0;
 
-  if (type === 'abonnement') {
-    // ✅ ABONNEMENTS : Toujours mensuels, prix selon engagement
-    prixUnitaire = parseFloat(item.prixUnitaire) || 0; // Déjà mis à jour par updatePrixProduits()
-    suffix = ' / mois';
-    
-  } else if (type === 'materiel') {
-    // ✅ MATÉRIELS : Prix selon mode ET engagement
-    if (mode === 'comptant') {
-      prixUnitaire = parseFloat(item.prixComptant) || parseFloat(item.prixUnitaire) || 0;
-      suffix = '';
-    } else if (mode === 'leasing' && engagement) {
-      prixUnitaire = parseFloat(item[`prixLeasing${engagement}`]) || parseFloat(item.prixUnitaire) || 0;
+    // ✅ CORRECTION : Logique prix selon le type et mode (comme l'ancien code)
+    let prixUnitaire = 0;
+    let suffix = '';
+
+    if (type === 'abonnement') {
+      // ✅ ABONNEMENTS : Toujours mensuels, prix selon engagement
+      prixUnitaire = parseFloat(item.prixUnitaire) || 0; // Déjà mis à jour par updatePrixProduits()
       suffix = ' / mois';
+
+    } else if (type === 'materiel') {
+      // ✅ MATÉRIELS : Prix selon mode ET engagement
+      if (mode === 'comptant') {
+        prixUnitaire = parseFloat(item.prixComptant) || parseFloat(item.prixUnitaire) || 0;
+        suffix = '';
+      } else if (mode === 'leasing' && engagement) {
+        prixUnitaire = parseFloat(item[`prixLeasing${engagement}`]) || parseFloat(item.prixUnitaire) || 0;
+        suffix = ' / mois';
+      }
+
+    } else if (type === 'frais') {
+      // ✅ FRAIS D'INSTALLATION : Même logique que matériels
+      if (mode === 'leasing') {
+        prixUnitaire = parseFloat(
+          item[`prixLeasing${engagement}`] ??
+          item.prixLeasing24 ??
+          item.prixLeasing36 ??
+          item.prixLeasing48 ??
+          item.prixLeasing63 ??
+          0
+        );
+        suffix = ' / mois';
+      } else {
+        prixUnitaire = parseFloat(item.prixComptant) || 0;
+        suffix = '';
+      }
     }
-    
-  } else if (type === 'frais') {
-    // ✅ FRAIS D'INSTALLATION : Même logique que matériels
-    if (mode === 'leasing') {
-      prixUnitaire = parseFloat(
-        item[`prixLeasing${engagement}`] ??
-        item.prixLeasing24 ??
-        item.prixLeasing36 ??
-        item.prixLeasing48 ??
-        item.prixLeasing63 ??
-        0
-      );
-      suffix = ' / mois';
-    } else {
-      prixUnitaire = parseFloat(item.prixComptant) || 0;
-      suffix = '';
-    }
-  }
 
-  const total = prixUnitaire * quantite;
-  
-  // Format des prix
-  const prixFormate = prixUnitaire.toLocaleString('fr-FR', { 
-    minimumFractionDigits: 2, 
-    maximumFractionDigits: 2 
-  });
-  const totalFormate = total.toLocaleString('fr-FR', { 
-    minimumFractionDigits: 2, 
-    maximumFractionDigits: 2 
-  });
+    const total = prixUnitaire * quantite;
 
-  console.log(`💰 ${item.nom}: ${prixUnitaire}€${suffix} x ${quantite} = ${total}€${suffix}`);
+    // Format des prix
+    const prixFormate = prixUnitaire.toLocaleString('fr-FR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+    const totalFormate = total.toLocaleString('fr-FR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
 
-  return `
+    console.log(`💰 ${item.nom}: ${prixUnitaire}€${suffix} x ${quantite} = ${total}€${suffix}`);
+
+    return `
     <div class="product-row">
       <!-- Info produit -->
       <div class="product-info">
@@ -603,68 +630,68 @@ function updateRecapitulatif() {
       </div>
     </div>
   `;
-}
+  }
 
 
   /**
    * Mise à jour des totaux par adresse
    */
   function updateRecapTotals() {
-  const config = JSON.parse(localStorage.getItem('soeasyConfig')) || {};
-  const mode = getSelectedFinancementMode();
-  const engagement = getSelectedEngagement();
+    const config = JSON.parse(localStorage.getItem('soeasyConfig')) || {};
+    const mode = getSelectedFinancementMode();
+    const engagement = getSelectedEngagement();
 
-  Object.entries(config).forEach(([index, data]) => {
-    let totalComptant = 0;
-    let totalMensuel = 0;
+    Object.entries(config).forEach(([index, data]) => {
+      let totalComptant = 0;
+      let totalMensuel = 0;
 
-    // ✅ CORRECTION : Reprendre la logique exacte de initStep6Events
+      // ✅ CORRECTION : Reprendre la logique exacte de initStep6Events
 
-    // 3a. Abonnements (toujours mensuels)
-    (data.abonnements || []).forEach(item => {
-      const prix = parseFloat(item.prixUnitaire) || 0;
-      const qty = parseInt(item.quantite) || 0;
-      totalMensuel += prix * qty;
-    });
+      // 3a. Abonnements (toujours mensuels)
+      (data.abonnements || []).forEach(item => {
+        const prix = parseFloat(item.prixUnitaire) || 0;
+        const qty = parseInt(item.quantite) || 0;
+        totalMensuel += prix * qty;
+      });
 
-    // 3b. Matériels
-    (data.materiels || []).forEach(item => {
-      const qty = parseInt(item.quantite) || 0;
+      // 3b. Matériels
+      (data.materiels || []).forEach(item => {
+        const qty = parseInt(item.quantite) || 0;
 
-      // Prix comptant toujours calculé
-      const prixComptant = parseFloat(item.prixComptant) || 0;
-      totalComptant += prixComptant * qty;
+        // Prix comptant toujours calculé
+        const prixComptant = parseFloat(item.prixComptant) || 0;
+        totalComptant += prixComptant * qty;
 
-      // Prix leasing si mode leasing
-      if (mode === 'leasing' && engagement) {
-        const prixLeasing = parseFloat(item[`prixLeasing${engagement}`]) || 0;
-        totalMensuel += prixLeasing * qty;
-      }
-    });
+        // Prix leasing si mode leasing
+        if (mode === 'leasing' && engagement) {
+          const prixLeasing = parseFloat(item[`prixLeasing${engagement}`]) || 0;
+          totalMensuel += prixLeasing * qty;
+        }
+      });
 
-    // 3c. Frais d'installation
-    (data.fraisInstallation || []).forEach(item => {
-      const qty = parseInt(item.quantite) || 0;
+      // 3c. Frais d'installation
+      (data.fraisInstallation || []).forEach(item => {
+        const qty = parseInt(item.quantite) || 0;
 
-      // Prix comptant toujours calculé
-      const prixComptant = parseFloat(item.prixComptant) || 0;
-      totalComptant += prixComptant * qty;
+        // Prix comptant toujours calculé
+        const prixComptant = parseFloat(item.prixComptant) || 0;
+        totalComptant += prixComptant * qty;
 
-      // Prix leasing si mode leasing
-      if (mode === 'leasing' && engagement) {
-        const prixLeasing = parseFloat(item[`prixLeasing${engagement}`]) || 0;
-        totalMensuel += prixLeasing * qty;
-      }
-    });
+        // Prix leasing si mode leasing
+        if (mode === 'leasing' && engagement) {
+          const prixLeasing = parseFloat(item[`prixLeasing${engagement}`]) || 0;
+          totalMensuel += prixLeasing * qty;
+        }
+      });
 
-    // ✅ AFFICHAGE : Reprendre la logique exacte
-    const $accordionBody = $(`#collapse-${index} .accordion-body`);
-    $accordionBody.find('.totaux-adresse').remove();
+      // ✅ AFFICHAGE : Reprendre la logique exacte
+      const $accordionBody = $(`#collapse-${index} .accordion-body`);
+      $accordionBody.find('.totaux-adresse').remove();
 
-    const $totauxDiv = $('<div class="totaux-adresse border mt-3 p-3 rounded"></div>');
+      const $totauxDiv = $('<div class="totaux-adresse border mt-3 p-3 rounded"></div>');
 
-    if (mode === 'comptant') {
-      $totauxDiv.append(`
+      if (mode === 'comptant') {
+        $totauxDiv.append(`
         <div class="d-flex justify-content-between">
           <small>Total mensuel (abonnements) :</small>
           <strong>${totalMensuel.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} € / mois</strong>
@@ -674,18 +701,18 @@ function updateRecapitulatif() {
           <strong>${totalComptant.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €</strong>
         </div>
       `);
-    } else {
-      $totauxDiv.append(`
+      } else {
+        $totauxDiv.append(`
         <div class="d-flex justify-content-between align-items-center">
           <strong>Total mensuel :</strong>
           <strong class="h5 mb-0">${totalMensuel.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} € / mois</strong>
         </div>
       `);
-    }
+      }
 
-    $accordionBody.append($totauxDiv);
-  });
-}
+      $accordionBody.append($totauxDiv);
+    });
+  }
 
   /**
    * ✅ Helper pour échapper le HTML
@@ -703,37 +730,37 @@ function updateRecapitulatif() {
   }
 
   function updateSidebarProduitsRecap() {
-  const recapData = JSON.parse(localStorage.getItem('soeasyConfig')) || {};
-  const adressesData = JSON.parse(localStorage.getItem('soeasyAdresses')) || [];
-  const $container = $('#config-recapitulatif');
-  $container.empty();
+    const recapData = JSON.parse(localStorage.getItem('soeasyConfig')) || {};
+    const adressesData = JSON.parse(localStorage.getItem('soeasyAdresses')) || [];
+    const $container = $('#config-recapitulatif');
+    $container.empty();
 
-  const engagement = getSelectedEngagement();
-  const mode = getSelectedFinancementMode();
+    const engagement = getSelectedEngagement();
+    const mode = getSelectedFinancementMode();
 
-  if (Object.keys(recapData).length === 0) {
-    $container.append('<p>Aucune sélection pour le moment.</p>');
-    return;
-  }
-
-  Object.entries(recapData).forEach(([index, config]) => {
-    // ✅ NOUVEAU : Utiliser ville_longue depuis les données enrichies
-    const adresseData = adressesData[index];
-    let displayName;
-    
-    if (adresseData && adresseData.ville_longue) {
-      displayName = adresseData.ville_longue;
-    } else if (adresseData && adresseData.adresse) {
-      displayName = adresseData.adresse;
-    } else {
-      displayName = `Adresse #${parseInt(index) + 1}`;
+    if (Object.keys(recapData).length === 0) {
+      $container.append('<p>Aucune sélection pour le moment.</p>');
+      return;
     }
 
-    const abonnements = config.abonnements || [];
-    const materiels = config.materiels || [];
-    const frais = config.fraisInstallation || [];
+    Object.entries(recapData).forEach(([index, config]) => {
+      // ✅ NOUVEAU : Utiliser ville_longue depuis les données enrichies
+      const adresseData = adressesData[index];
+      let displayName;
 
-    const $accordion = $(`
+      if (adresseData && adresseData.ville_longue) {
+        displayName = adresseData.ville_longue;
+      } else if (adresseData && adresseData.adresse) {
+        displayName = adresseData.adresse;
+      } else {
+        displayName = `Adresse #${parseInt(index) + 1}`;
+      }
+
+      const abonnements = config.abonnements || [];
+      const materiels = config.materiels || [];
+      const frais = config.fraisInstallation || [];
+
+      const $accordion = $(`
       <div class="accordion-item mb-2">
         <h2 class="accordion-header">
           <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
@@ -749,33 +776,33 @@ function updateRecapitulatif() {
       </div>
     `);
 
-    // Reste du code inchangé...
-    const $body = $accordion.find('.products-recap');
-    
-    if (abonnements.length > 0) {
-      $body.append('<h6 class="text-primary mb-1">Abonnements</h6>');
-      abonnements.forEach(item => {
-        $body.append(`<div class="small mb-1">${item.nom} <span class="float-end">${item.quantite}x</span></div>`);
-      });
-    }
+      // Reste du code inchangé...
+      const $body = $accordion.find('.products-recap');
 
-    if (materiels.length > 0) {
-      $body.append('<h6 class="text-primary mb-1 mt-2">Matériels</h6>');
-      materiels.forEach(item => {
-        $body.append(`<div class="small mb-1">${item.nom} <span class="float-end">${item.quantite}x</span></div>`);
-      });
-    }
+      if (abonnements.length > 0) {
+        $body.append('<h6 class="text-primary mb-1">Abonnements</h6>');
+        abonnements.forEach(item => {
+          $body.append(`<div class="small mb-1">${item.nom} <span class="float-end">${item.quantite}x</span></div>`);
+        });
+      }
 
-    if (frais.length > 0) {
-      $body.append('<h6 class="text-primary mb-1 mt-2">Frais installation</h6>');
-      frais.forEach(item => {
-        $body.append(`<div class="small mb-1">${item.nom} <span class="float-end">${item.quantite}x</span></div>`);
-      });
-    }
+      if (materiels.length > 0) {
+        $body.append('<h6 class="text-primary mb-1 mt-2">Matériels</h6>');
+        materiels.forEach(item => {
+          $body.append(`<div class="small mb-1">${item.nom} <span class="float-end">${item.quantite}x</span></div>`);
+        });
+      }
 
-    $container.append($accordion);
-  });
-}
+      if (frais.length > 0) {
+        $body.append('<h6 class="text-primary mb-1 mt-2">Frais installation</h6>');
+        frais.forEach(item => {
+          $body.append(`<div class="small mb-1">${item.nom} <span class="float-end">${item.quantite}x</span></div>`);
+        });
+      }
+
+      $container.append($accordion);
+    });
+  }
 
 
 
@@ -1222,46 +1249,46 @@ function updateRecapitulatif() {
  * ========================================
  */
 
-/**
- * Récupération des données pour Step 6 (localStorage prioritaire)
- */
-function getConfigForStep6() {
-  const localConfig = JSON.parse(localStorage.getItem('soeasyConfig') || '{}');
-  const sessionConfig = window.step6Data?.sessionConfig || {};
+  /**
+   * Récupération des données pour Step 6 (localStorage prioritaire)
+   */
+  function getConfigForStep6() {
+    const localConfig = JSON.parse(localStorage.getItem('soeasyConfig') || '{}');
+    const sessionConfig = window.step6Data?.sessionConfig || {};
 
-  if (Object.keys(localConfig).length > 0) {
-    console.log('📱 Step 6 : Utilisation des données localStorage');
-    return localConfig;
-  } else if (Object.keys(sessionConfig).length > 0) {
-    console.log('🖥️ Step 6 : Fallback vers données session');
-    return sessionConfig;
-  } else {
-    console.log('⚠️ Step 6 : Aucune donnée trouvée');
-    return {};
+    if (Object.keys(localConfig).length > 0) {
+      console.log('📱 Step 6 : Utilisation des données localStorage');
+      return localConfig;
+    } else if (Object.keys(sessionConfig).length > 0) {
+      console.log('🖥️ Step 6 : Fallback vers données session');
+      return sessionConfig;
+    } else {
+      console.log('⚠️ Step 6 : Aucune donnée trouvée');
+      return {};
+    }
   }
-}
 
-/**
- * Génération principale du contenu Step 6
- */
-function generateStep6Content() {
-  console.log('🎯 Génération du contenu Step 6 depuis localStorage');
+  /**
+   * Génération principale du contenu Step 6
+   */
+  function generateStep6Content() {
+    console.log('🎯 Génération du contenu Step 6 depuis localStorage');
 
-  try {
-    // 1. Récupérer les données
-    const config = getConfigForStep6();
-    const adresses = JSON.parse(localStorage.getItem('soeasyAdresses') || '[]');
-    const mode = getSelectedFinancementMode();
-    const engagement = getSelectedEngagement();
+    try {
+      // 1. Récupérer les données
+      const config = getConfigForStep6();
+      const adresses = JSON.parse(localStorage.getItem('soeasyAdresses') || '[]');
+      const mode = getSelectedFinancementMode();
+      const engagement = getSelectedEngagement();
 
-    console.log('📦 Config Step 6:', config);
-    console.log('📍 Adresses:', adresses);
-    console.log('💳 Mode financement:', mode);
-    console.log('📅 Engagement:', engagement);
+      console.log('📦 Config Step 6:', config);
+      console.log('📍 Adresses:', adresses);
+      console.log('💳 Mode financement:', mode);
+      console.log('📅 Engagement:', engagement);
 
-    // 2. Vérifier qu'on a des données
-    if (Object.keys(config).length === 0) {
-      $('#step6-content').html(`
+      // 2. Vérifier qu'on a des données
+      if (Object.keys(config).length === 0) {
+        $('#step6-content').html(`
         <div class="alert alert-warning">
           <h5><i class="fas fa-exclamation-triangle me-2"></i> Configuration vide</h5>
           <p>Aucune configuration trouvée. Veuillez reprendre depuis l'étape 1.</p>
@@ -1270,36 +1297,36 @@ function generateStep6Content() {
           </a>
         </div>
       `).show();
+        $('#step6-loader').hide();
+        $('#step6-navigation').hide();
+        return;
+      }
+
+      // 3. Générer le HTML pour chaque adresse
+      let html = '<div class="accordion" id="accordionRecap">';
+
+      Object.keys(config).forEach((index, i) => {
+        const adresseData = config[index];
+        const adresseInfo = adresses[index];
+
+        html += generateRecapAdresseBlock(index, adresseData, adresseInfo, mode, engagement, i === 0);
+      });
+
+      html += '</div>';
+
+      // 4. Injecter dans le DOM
+      $('#step6-content').html(html).show();
       $('#step6-loader').hide();
-      $('#step6-navigation').hide();
-      return;
-    }
+      $('#step6-navigation').show();
 
-    // 3. Générer le HTML pour chaque adresse
-    let html = '<div class="accordion" id="accordionRecap">';
-    
-    Object.keys(config).forEach((index, i) => {
-      const adresseData = config[index];
-      const adresseInfo = adresses[index];
-      
-      html += generateRecapAdresseBlock(index, adresseData, adresseInfo, mode, engagement, i === 0);
-    });
-    
-    html += '</div>';
+      // 5. Calculer et afficher les totaux
+      updateRecapTotals();
 
-    // 4. Injecter dans le DOM
-    $('#step6-content').html(html).show();
-    $('#step6-loader').hide();
-    $('#step6-navigation').show();
+      console.log('✅ Contenu Step 6 généré avec succès');
 
-    // 5. Calculer et afficher les totaux
-    updateRecapTotals();
-
-    console.log('✅ Contenu Step 6 généré avec succès');
-
-  } catch (error) {
-    console.error('❌ Erreur génération Step 6:', error);
-    $('#step6-content').html(`
+    } catch (error) {
+      console.error('❌ Erreur génération Step 6:', error);
+      $('#step6-content').html(`
       <div class="alert alert-danger">
         <h5><i class="fas fa-exclamation-circle me-2"></i> Erreur</h5>
         <p>Une erreur est survenue lors du chargement du récapitulatif.</p>
@@ -1308,25 +1335,25 @@ function generateStep6Content() {
         </button>
       </div>
     `).show();
-    $('#step6-loader').hide();
+      $('#step6-loader').hide();
+    }
   }
-}
 
-/**
- * Génération du bloc récapitulatif pour une adresse
- */
-function generateRecapAdresseBlock(index, data, adresseInfo, mode, engagement, isExpanded = false) {
-  const adresseNom = adresseInfo?.adresse || `Adresse ${parseInt(index) + 1}`;
-  
-  // Utiliser ville_longue si disponible, sinon extraire de l'adresse
-  let ville = adresseNom;
-  if (adresseInfo?.ville_longue) {
-    ville = adresseInfo.ville_longue;
-  } else if (typeof soeasy_get_ville_longue === 'function') {
-    ville = soeasy_get_ville_longue(adresseNom);
-  }
-  
-  let html = `
+  /**
+   * Génération du bloc récapitulatif pour une adresse
+   */
+  function generateRecapAdresseBlock(index, data, adresseInfo, mode, engagement, isExpanded = false) {
+    const adresseNom = adresseInfo?.adresse || `Adresse ${parseInt(index) + 1}`;
+
+    // Utiliser ville_longue si disponible, sinon extraire de l'adresse
+    let ville = adresseNom;
+    if (adresseInfo?.ville_longue) {
+      ville = adresseInfo.ville_longue;
+    } else if (typeof soeasy_get_ville_longue === 'function') {
+      ville = soeasy_get_ville_longue(adresseNom);
+    }
+
+    let html = `
     <div class="accordion-item">
       <h2 class="accordion-header" id="heading-recap-${index}">
         <button class="accordion-button ${!isExpanded ? 'collapsed' : ''}" 
@@ -1345,15 +1372,15 @@ function generateRecapAdresseBlock(index, data, adresseInfo, mode, engagement, i
         <div class="accordion-body">
   `;
 
-  // ABONNEMENTS
-  if (data.abonnements && data.abonnements.length > 0) {
-    html += '<div class="recap-section recap-abonnements mb-4">';
-    html += '<h5 class="section-title"><i class="fas fa-calendar-alt me-2"></i> Abonnements</h5>';
-    html += '<div class="products-grid abonnements-grid">';
-    
-    // En-tête desktop
-    const suffixHeader = (mode === 'leasing' && engagement) ? '/mois' : '';
-    html += `
+    // ABONNEMENTS
+    if (data.abonnements && data.abonnements.length > 0) {
+      html += '<div class="recap-section recap-abonnements mb-4">';
+      html += '<h5 class="section-title"><i class="fas fa-calendar-alt me-2"></i> Abonnements</h5>';
+      html += '<div class="products-grid abonnements-grid">';
+
+      // En-tête desktop
+      const suffixHeader = (mode === 'leasing' && engagement) ? '/mois' : '';
+      html += `
       <div class="grid-header d-none d-md-grid">
         <div class="col-product">Produit</div>
         <div class="col-unit-price">Prix unitaire${suffixHeader}</div>
@@ -1361,24 +1388,24 @@ function generateRecapAdresseBlock(index, data, adresseInfo, mode, engagement, i
         <div class="col-total-price justify-content-end">Total${suffixHeader}</div>
       </div>
     `;
-    
-    // Produits
-    data.abonnements.forEach(item => {
-      html += generateRecapProductRow(item, mode, engagement, 'abonnement');
-    });
-    
-    html += '</div></div>';
-  }
 
-  // MATÉRIELS
-  if (data.materiels && data.materiels.length > 0) {
-    html += '<div class="recap-section recap-materiels mb-4">';
-    html += '<h5 class="section-title"><i class="fas fa-box me-2"></i> Matériels et équipements</h5>';
-    html += '<div class="products-grid materiels-grid">';
-    
-    // En-tête desktop
-    const suffixHeader = (mode === 'leasing' && engagement) ? '/mois' : '';
-    html += `
+      // Produits
+      data.abonnements.forEach(item => {
+        html += generateRecapProductRow(item, mode, engagement, 'abonnement');
+      });
+
+      html += '</div></div>';
+    }
+
+    // MATÉRIELS
+    if (data.materiels && data.materiels.length > 0) {
+      html += '<div class="recap-section recap-materiels mb-4">';
+      html += '<h5 class="section-title"><i class="fas fa-box me-2"></i> Matériels et équipements</h5>';
+      html += '<div class="products-grid materiels-grid">';
+
+      // En-tête desktop
+      const suffixHeader = (mode === 'leasing' && engagement) ? '/mois' : '';
+      html += `
       <div class="grid-header d-none d-md-grid">
         <div class="col-product">Produit</div>
         <div class="col-unit-price">Prix unitaire${suffixHeader}</div>
@@ -1386,24 +1413,24 @@ function generateRecapAdresseBlock(index, data, adresseInfo, mode, engagement, i
         <div class="col-total-price justify-content-end">Total${suffixHeader}</div>
       </div>
     `;
-    
-    // Produits
-    data.materiels.forEach(item => {
-      html += generateRecapProductRow(item, mode, engagement, 'materiel');
-    });
-    
-    html += '</div></div>';
-  }
 
-  // FRAIS D'INSTALLATION
-  if (data.fraisInstallation && data.fraisInstallation.length > 0) {
-    html += '<div class="recap-section recap-frais mb-4">';
-    html += '<h5 class="section-title"><i class="fas fa-tools me-2"></i> Frais d\'installation</h5>';
-    html += '<div class="products-grid frais-grid">';
-    
-    // En-tête desktop
-    const suffixHeader = (mode === 'leasing' && engagement) ? '/mois' : '';
-    html += `
+      // Produits
+      data.materiels.forEach(item => {
+        html += generateRecapProductRow(item, mode, engagement, 'materiel');
+      });
+
+      html += '</div></div>';
+    }
+
+    // FRAIS D'INSTALLATION
+    if (data.fraisInstallation && data.fraisInstallation.length > 0) {
+      html += '<div class="recap-section recap-frais mb-4">';
+      html += '<h5 class="section-title"><i class="fas fa-tools me-2"></i> Frais d\'installation</h5>';
+      html += '<div class="products-grid frais-grid">';
+
+      // En-tête desktop
+      const suffixHeader = (mode === 'leasing' && engagement) ? '/mois' : '';
+      html += `
       <div class="grid-header d-none d-md-grid">
         <div class="col-product">Produit</div>
         <div class="col-unit-price">Prix unitaire${suffixHeader}</div>
@@ -1411,74 +1438,74 @@ function generateRecapAdresseBlock(index, data, adresseInfo, mode, engagement, i
         <div class="col-total-price justify-content-end">Total${suffixHeader}</div>
       </div>
     `;
-    
-    // Produits
-    data.fraisInstallation.forEach(item => {
-      html += generateRecapProductRow(item, mode, engagement, 'frais');
-    });
-    
-    html += '</div></div>';
-  }
 
-  // Totaux pour cette adresse
-  html += `<div class="recap-totals mt-4" id="recap-totals-${index}"></div>`;
+      // Produits
+      data.fraisInstallation.forEach(item => {
+        html += generateRecapProductRow(item, mode, engagement, 'frais');
+      });
 
-  html += `
+      html += '</div></div>';
+    }
+
+    // Totaux pour cette adresse
+    html += `<div class="recap-totals mt-4" id="recap-totals-${index}"></div>`;
+
+    html += `
         </div>
       </div>
     </div>
   `;
 
-  return html;
-}
+    return html;
+  }
 
-/**
- * Génération d'une ligne produit dans le récap
- */
-function generateRecapProductRow(item, mode, engagement, type) {
-  const quantite = parseInt(item.quantite) || 0;
-  
-  if (quantite === 0) return '';
-  
-  let prixUnitaire = 0;
-  let suffix = '';
-  
-  // Déterminer le prix selon type et mode
-  if (type === 'abonnement') {
-    // Abonnements : toujours prix mensuel
-    prixUnitaire = parseFloat(item.prixUnitaire) || 0;
-    suffix = ' / mois';
-  } else {
-    // Matériels et Frais : selon mode financement
-    if (mode === 'leasing' && engagement) {
-      prixUnitaire = parseFloat(
-        item[`prixLeasing${engagement}`] || 
-        item.prixLeasing36 || 
-        item.prixLeasing24 || 
-        item.prixLeasing48 ||
-        item.prixLeasing63 ||
-        0
-      );
+  /**
+   * Génération d'une ligne produit dans le récap
+   */
+  function generateRecapProductRow(item, mode, engagement, type) {
+    const quantite = parseInt(item.quantite) || 0;
+
+    if (quantite === 0) return '';
+
+    let prixUnitaire = 0;
+    let suffix = '';
+
+    // Déterminer le prix selon type et mode
+    if (type === 'abonnement') {
+      // Abonnements : toujours prix mensuel
+      prixUnitaire = parseFloat(item.prixUnitaire) || 0;
       suffix = ' / mois';
     } else {
-      prixUnitaire = parseFloat(item.prixComptant) || 0;
-      suffix = '';
+      // Matériels et Frais : selon mode financement
+      if (mode === 'leasing' && engagement) {
+        prixUnitaire = parseFloat(
+          item[`prixLeasing${engagement}`] ||
+          item.prixLeasing36 ||
+          item.prixLeasing24 ||
+          item.prixLeasing48 ||
+          item.prixLeasing63 ||
+          0
+        );
+        suffix = ' / mois';
+      } else {
+        prixUnitaire = parseFloat(item.prixComptant) || 0;
+        suffix = '';
+      }
     }
-  }
-  
-  const total = prixUnitaire * quantite;
-  
-  // Format des prix
-  const prixFormate = prixUnitaire.toLocaleString('fr-FR', { 
-    minimumFractionDigits: 2, 
-    maximumFractionDigits: 2 
-  });
-  const totalFormate = total.toLocaleString('fr-FR', { 
-    minimumFractionDigits: 2, 
-    maximumFractionDigits: 2 
-  });
 
-  return `
+    const total = prixUnitaire * quantite;
+
+    // Format des prix
+    const prixFormate = prixUnitaire.toLocaleString('fr-FR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+    const totalFormate = total.toLocaleString('fr-FR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+
+    return `
     <div class="product-row">
       <!-- Info produit -->
       <div class="product-info">
@@ -1508,68 +1535,68 @@ function generateRecapProductRow(item, mode, engagement, type) {
       </div>
     </div>
   `;
-}
+  }
 
-/**
- * Mise à jour des totaux par adresse
- */
-function updateRecapTotals() {
-  const config = JSON.parse(localStorage.getItem('soeasyConfig') || '{}');
-  const mode = getSelectedFinancementMode();
-  const engagement = getSelectedEngagement();
+  /**
+   * Mise à jour des totaux par adresse
+   */
+  function updateRecapTotals() {
+    const config = JSON.parse(localStorage.getItem('soeasyConfig') || '{}');
+    const mode = getSelectedFinancementMode();
+    const engagement = getSelectedEngagement();
 
-  console.log('💰 Calcul totaux Step 6 - mode:', mode, 'engagement:', engagement);
+    console.log('💰 Calcul totaux Step 6 - mode:', mode, 'engagement:', engagement);
 
-  Object.entries(config).forEach(([index, data]) => {
-    let totalComptant = 0;
-    let totalMensuel = 0;
+    Object.entries(config).forEach(([index, data]) => {
+      let totalComptant = 0;
+      let totalMensuel = 0;
 
-    // Abonnements (toujours mensuels)
-    (data.abonnements || []).forEach(item => {
-      const prix = parseFloat(item.prixUnitaire) || 0;
-      const qty = parseInt(item.quantite) || 0;
-      totalMensuel += prix * qty;
-    });
+      // Abonnements (toujours mensuels)
+      (data.abonnements || []).forEach(item => {
+        const prix = parseFloat(item.prixUnitaire) || 0;
+        const qty = parseInt(item.quantite) || 0;
+        totalMensuel += prix * qty;
+      });
 
-    // Matériels
-    (data.materiels || []).forEach(item => {
-      const qty = parseInt(item.quantite) || 0;
-      
-      // Prix comptant
-      const prixComptant = parseFloat(item.prixComptant) || 0;
-      totalComptant += prixComptant * qty;
-      
-      // Prix leasing si mode leasing
+      // Matériels
+      (data.materiels || []).forEach(item => {
+        const qty = parseInt(item.quantite) || 0;
+
+        // Prix comptant
+        const prixComptant = parseFloat(item.prixComptant) || 0;
+        totalComptant += prixComptant * qty;
+
+        // Prix leasing si mode leasing
+        if (mode === 'leasing' && engagement) {
+          const prixLeasing = parseFloat(item[`prixLeasing${engagement}`]) || 0;
+          totalMensuel += prixLeasing * qty;
+        }
+      });
+
+      // Frais d'installation
+      (data.fraisInstallation || []).forEach(item => {
+        const qty = parseInt(item.quantite) || 0;
+
+        // Prix comptant
+        const prixComptant = parseFloat(item.prixComptant) || 0;
+        totalComptant += prixComptant * qty;
+
+        // Prix leasing si mode leasing
+        if (mode === 'leasing' && engagement) {
+          const prixLeasing = parseFloat(item[`prixLeasing${engagement}`]) || 0;
+          totalMensuel += prixLeasing * qty;
+        }
+      });
+
+      console.log(`  📊 Adresse ${index}: Mensuel=${totalMensuel}€, Comptant=${totalComptant}€`);
+
+      // Affichage des totaux
+      const $container = $(`#recap-totals-${index}`);
+      $container.empty();
+
       if (mode === 'leasing' && engagement) {
-        const prixLeasing = parseFloat(item[`prixLeasing${engagement}`]) || 0;
-        totalMensuel += prixLeasing * qty;
-      }
-    });
-
-    // Frais d'installation
-    (data.fraisInstallation || []).forEach(item => {
-      const qty = parseInt(item.quantite) || 0;
-      
-      // Prix comptant
-      const prixComptant = parseFloat(item.prixComptant) || 0;
-      totalComptant += prixComptant * qty;
-      
-      // Prix leasing si mode leasing
-      if (mode === 'leasing' && engagement) {
-        const prixLeasing = parseFloat(item[`prixLeasing${engagement}`]) || 0;
-        totalMensuel += prixLeasing * qty;
-      }
-    });
-
-    console.log(`  📊 Adresse ${index}: Mensuel=${totalMensuel}€, Comptant=${totalComptant}€`);
-
-    // Affichage des totaux
-    const $container = $(`#recap-totals-${index}`);
-    $container.empty();
-
-    if (mode === 'leasing' && engagement) {
-      // Mode leasing : afficher mensuel total + détail comptant
-      $container.append(`
+        // Mode leasing : afficher mensuel total + détail comptant
+        $container.append(`
         <div class="d-flex justify-content-between align-items-center p-3 bg-light rounded">
           <div>
             <div class="fw-bold text-primary fs-5">
@@ -1583,9 +1610,9 @@ function updateRecapTotals() {
           </div>
         </div>
       `);
-    } else {
-      // Mode comptant : afficher séparément
-      $container.append(`
+      } else {
+        // Mode comptant : afficher séparément
+        $container.append(`
         <div class="p-3 bg-light rounded">
           <div class="d-flex justify-content-between mb-2">
             <span class="fw-bold">Total abonnements mensuels :</span>
@@ -1597,12 +1624,12 @@ function updateRecapTotals() {
           </div>
         </div>
       `);
-    }
-  });
-}
+      }
+    });
+  }
 
-// Exposer les fonctions globalement
-window.generateStep6Content = generateStep6Content;
-window.updateRecapTotals = updateRecapTotals;
+  // Exposer les fonctions globalement
+  window.generateStep6Content = generateStep6Content;
+  window.updateRecapTotals = updateRecapTotals;
 
 });

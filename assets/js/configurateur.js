@@ -1570,14 +1570,13 @@ window.initStep6Events = function () {
 
   /**
  * =============================================================================
- * INTÉGRATION SIDEBAR COLLAPSIBLE - À ajouter à configurateur.js
+ * INTÉGRATION SIDEBAR COLLAPSIBLE
  * =============================================================================
  */
 
   // Event listeners pour la sidebar - À ajouter à la fin de configurateur.js
   document.addEventListener('sidebarOpened', function () {
-    console.log('🎯 Sidebar ouverte - mise à jour du contenu');
-
+  
     // Recalculer les totaux si nécessaire
     if (typeof updateSidebarTotauxRecap === 'function') {
       updateSidebarTotauxRecap();
@@ -1590,93 +1589,11 @@ window.initStep6Events = function () {
   });
 
   document.addEventListener('sidebarClosed', function () {
-    console.log('📱 Sidebar fermée');
     // Actions à effectuer quand la sidebar se ferme si nécessaire
   });
 
-  // Notification automatique quand un produit est ajouté
-  function notifySidebarProductAdded() {
-    // Déclencher l'event pour auto-ouvrir la sidebar
-    document.dispatchEvent(new CustomEvent('productAddedToConfig'));
-
-    // Mettre à jour le compteur
-    setTimeout(() => {
-      if (window.sidebarManager && typeof window.sidebarManager.updateCartCount === 'function') {
-        window.sidebarManager.updateCartCount();
-      }
-    }, 100);
-  }
-
-  // Modifier la fonction saveToLocalConfig existante pour notifier la sidebar
-  // Remplacer la fonction saveToLocalConfig par cette version améliorée :
-
-  function saveToLocalConfig(adresseIndex, type, produits, notifyChange = true) {
-    console.log(`💾 saveToLocalConfig - index: ${adresseIndex}, type: ${type}`);
-
-    try {
-      // Récupérer la config existante
-      let config = JSON.parse(localStorage.getItem('soeasyConfig') || '{}');
-
-      // Initialiser l'index si nécessaire
-      if (!config[adresseIndex]) {
-        config[adresseIndex] = {
-          abonnements: [],
-          materiels: [],
-          fraisInstallation: []
-        };
-      }
-
-      // Mettre à jour la section spécifique
-      config[adresseIndex][type] = Array.isArray(produits) ? produits : [];
-
-      // Sauvegarder
-      localStorage.setItem('soeasyConfig', JSON.stringify(config));
-
-      // Envoyer en session via AJAX si disponible
-      if (typeof soeasyVars !== 'undefined' && soeasyVars.ajaxurl) {
-        sendConfigToSession(config);
-      }
-
-      // Notifier la sidebar si demandé
-      if (notifyChange) {
-        notifySidebarProductAdded();
-
-        // Mettre à jour la sidebar si elle est ouverte
-        setTimeout(() => {
-          if (typeof updateSidebarProduitsRecap === 'function') {
-            updateSidebarProduitsRecap();
-          }
-          if (typeof updateSidebarTotauxRecap === 'function') {
-            updateSidebarTotauxRecap();
-          }
-        }, 50);
-      }
-
-      console.log(`✅ Configuration sauvegardée pour l'adresse ${adresseIndex}:`, config[adresseIndex]);
-
-    } catch (error) {
-      console.error('❌ Erreur saveToLocalConfig:', error);
-    }
-  }
-
-  // Fonction d'envoi en session (si pas déjà présente)
-  function sendConfigToSession(config) {
-    $.post(soeasyVars.ajaxurl, {
-      action: 'soeasy_update_config_session',
-      config: config,
-      nonce: soeasyVars.nonce_config
-    })
-      .done(function (response) {
-        console.log('🔄 Config envoyée en session');
-      })
-      .fail(function () {
-        console.warn('⚠️ Échec envoi session (non bloquant)');
-      });
-  }
-
   // Hook pour mettre à jour le compteur lors des changements
   $(document).on('change', 'input[type="checkbox"], input[type="radio"], select', function () {
-    // Petite pause pour laisser le temps aux autres handlers de s'exécuter
     setTimeout(() => {
       if (window.sidebarManager && typeof window.sidebarManager.updateCartCount === 'function') {
         window.sidebarManager.updateCartCount();
