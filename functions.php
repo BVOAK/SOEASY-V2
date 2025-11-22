@@ -397,7 +397,8 @@ add_action('wp_head', 'soeasy_dynamic_css');
 
 require_once get_template_directory() . '/configurateur/functions-configurateur.php';
 require_once get_template_directory() . '/includes/functions-cart.php';
-
+require_once get_template_directory() . '/configurateur/database-schema.php';
+require_once get_template_directory() . '/configurateur/config-manager.php';
 
 /**
  * Enqueue Bootstrap + FontAwesome + Assets SoEasy

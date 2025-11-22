@@ -138,8 +138,7 @@ function updateAllPrixTotaux() {
   console.log('✅ Tous les prix totaux mis à jour');
 }
 
-// Calcul total global si souhaité
-// Dans configurateur-fonctions.js
+
 
 function saveToLocalConfig(adresseId, section, nouveauxProduits, options = {}) {
   const key = 'soeasyConfig';

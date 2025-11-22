@@ -1147,4 +1147,487 @@ function soeasy_display_custom_cart_subtotal($subtotal_html, $cart_item, $cart_i
     return $subtotal_html;
 }
 
+
+/**
+ * AJAX : Sauvegarder une nouvelle configuration
+ * 
+ * Reçoit les données du localStorage et les sauvegarde en base de données.
+ * 
+ * POST params:
+ * - config_name : Nom de la configuration
+ * - config_data : JSON complet (string)
+ * - nonce : soeasy_config_action
+ * 
+ * Response:
+ * - success: { config_id: 123, message: '...' }
+ * - error: { message: '...' }
+ */
+function soeasy_ajax_save_configuration() {
+    // Vérification du nonce
+    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+    
+    // Vérifier que l'utilisateur est connecté
+    $user_id = get_current_user_id();
+    if (!$user_id) {
+        wp_send_json_error(['message' => 'Vous devez être connecté pour sauvegarder une configuration']);
+    }
+    
+    // Récupérer les paramètres
+    $config_name = sanitize_text_field($_POST['config_name'] ?? 'Configuration sans nom');
+    $config_data = $_POST['config_data'] ?? '';
+    
+    // Validation
+    if (empty($config_data)) {
+        wp_send_json_error(['message' => 'Données de configuration manquantes']);
+    }
+    
+    // Vérifier que c'est un JSON valide
+    $decoded = json_decode($config_data);
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        wp_send_json_error(['message' => 'Format JSON invalide : ' . json_last_error_msg()]);
+    }
+    
+    // Sauvegarder via la fonction CRUD
+    $config_id = soeasy_save_configuration($user_id, $config_data, $config_name, 'draft');
+    
+    if (is_wp_error($config_id)) {
+        wp_send_json_error(['message' => $config_id->get_error_message()]);
+    }
+    
+    // Succès
+    wp_send_json_success([
+        'message' => 'Configuration enregistrée avec succès',
+        'config_id' => $config_id,
+        'config_name' => $config_name
+    ]);
+}
+add_action('wp_ajax_soeasy_ajax_save_configuration', 'soeasy_ajax_save_configuration');
+
+/**
+ * AJAX : Charger une configuration par ID
+ * 
+ * POST params:
+ * - config_id : ID de la configuration à charger
+ * - nonce : soeasy_config_action
+ * 
+ * Response:
+ * - success: { config: {...}, config_name: '...', config_id: 123 }
+ * - error: { message: '...' }
+ */
+function soeasy_ajax_load_configuration() {
+    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+    
+    $config_id = intval($_POST['config_id'] ?? 0);
+    $user_id = get_current_user_id();
+    
+    if (!$config_id) {
+        wp_send_json_error(['message' => 'ID de configuration manquant']);
+    }
+    
+    // Récupérer la configuration
+    $config = soeasy_get_configuration($config_id);
+    
+    if (!$config) {
+        wp_send_json_error(['message' => 'Configuration introuvable']);
+    }
+    
+    // Vérifier les droits d'accès
+    // L'utilisateur doit être propriétaire OU admin
+    if ($config->user_id != $user_id && !current_user_can('manage_options')) {
+        wp_send_json_error(['message' => 'Vous n\'avez pas accès à cette configuration']);
+    }
+    
+    // Décoder le JSON
+    $config_decoded = json_decode($config->config_data, true);
+    
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        wp_send_json_error(['message' => 'Erreur de décodage JSON']);
+    }
+    
+    // Succès
+    wp_send_json_success([
+        'config' => $config_decoded,
+        'config_name' => $config->config_name,
+        'config_id' => $config->id,
+        'status' => $config->status,
+        'created_at' => $config->created_at,
+        'updated_at' => $config->updated_at
+    ]);
+}
+add_action('wp_ajax_soeasy_ajax_load_configuration', 'soeasy_ajax_load_configuration');
+
+/**
+ * AJAX : Lister toutes les configurations de l'utilisateur
+ * 
+ * POST params:
+ * - nonce : soeasy_config_action
+ * - limit (optionnel) : Nombre max de résultats (défaut: 50)
+ * - status (optionnel) : Filtrer par statut
+ * 
+ * Response:
+ * - success: { configurations: [...], count: 10 }
+ */
+function soeasy_ajax_list_configurations() {
+    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+    
+    $user_id = get_current_user_id();
+    
+    if (!$user_id) {
+        wp_send_json_error(['message' => 'Utilisateur non connecté']);
+    }
+    
+    $limit = intval($_POST['limit'] ?? 50);
+    $status = sanitize_text_field($_POST['status'] ?? '');
+    
+    // Récupérer les configurations
+    $configs = soeasy_get_user_configurations($user_id, $limit, $status ?: null);
+    
+    // Formatter les données (sans inclure le JSON complet pour économiser bande passante)
+    $formatted_configs = array_map(function($config) {
+        return [
+            'id' => $config->id,
+            'config_name' => $config->config_name,
+            'status' => $config->status,
+            'created_at' => $config->created_at,
+            'updated_at' => $config->updated_at,
+            'completed_at' => $config->completed_at,
+            'order_id' => $config->order_id
+        ];
+    }, $configs);
+    
+    wp_send_json_success([
+        'configurations' => $formatted_configs,
+        'count' => count($formatted_configs)
+    ]);
+}
+add_action('wp_ajax_soeasy_ajax_list_configurations', 'soeasy_ajax_list_configurations');
+
+/**
+ * AJAX : Supprimer une configuration
+ * 
+ * POST params:
+ * - config_id : ID de la configuration à supprimer
+ * - nonce : soeasy_config_action
+ * 
+ * Response:
+ * - success: { message: '...' }
+ * - error: { message: '...' }
+ */
+function soeasy_ajax_delete_configuration() {
+    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+    
+    $config_id = intval($_POST['config_id'] ?? 0);
+    $user_id = get_current_user_id();
+    
+    if (!$config_id) {
+        wp_send_json_error(['message' => 'ID de configuration manquant']);
+    }
+    
+    // Récupérer la config pour vérifier les droits
+    $config = soeasy_get_configuration($config_id);
+    
+    if (!$config) {
+        wp_send_json_error(['message' => 'Configuration introuvable']);
+    }
+    
+    // Vérifier propriété (ou admin)
+    if ($config->user_id != $user_id && !current_user_can('manage_options')) {
+        wp_send_json_error(['message' => 'Vous n\'avez pas le droit de supprimer cette configuration']);
+    }
+    
+    // Supprimer
+    $deleted = soeasy_delete_configuration($config_id);
+    
+    if (!$deleted) {
+        wp_send_json_error(['message' => 'Erreur lors de la suppression']);
+    }
+    
+    wp_send_json_success(['message' => 'Configuration supprimée avec succès']);
+}
+add_action('wp_ajax_soeasy_ajax_delete_configuration', 'soeasy_ajax_delete_configuration');
+
+/**
+ * AJAX : Dupliquer une configuration
+ * 
+ * POST params:
+ * - config_id : ID de la configuration à dupliquer
+ * - new_name (optionnel) : Nouveau nom
+ * - nonce : soeasy_config_action
+ * 
+ * Response:
+ * - success: { new_config_id: 456, message: '...' }
+ */
+function soeasy_ajax_duplicate_configuration() {
+    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+    
+    $config_id = intval($_POST['config_id'] ?? 0);
+    $new_name = sanitize_text_field($_POST['new_name'] ?? '');
+    $user_id = get_current_user_id();
+    
+    if (!$config_id) {
+        wp_send_json_error(['message' => 'ID de configuration manquant']);
+    }
+    
+    // Vérifier propriété
+    $config = soeasy_get_configuration($config_id);
+    
+    if (!$config) {
+        wp_send_json_error(['message' => 'Configuration introuvable']);
+    }
+    
+    if ($config->user_id != $user_id && !current_user_can('manage_options')) {
+        wp_send_json_error(['message' => 'Vous n\'avez pas accès à cette configuration']);
+    }
+    
+    // Dupliquer
+    $new_id = soeasy_duplicate_configuration($config_id, $new_name ?: null);
+    
+    if (is_wp_error($new_id)) {
+        wp_send_json_error(['message' => $new_id->get_error_message()]);
+    }
+    
+    wp_send_json_success([
+        'message' => 'Configuration dupliquée avec succès',
+        'new_config_id' => $new_id
+    ]);
+}
+add_action('wp_ajax_soeasy_ajax_duplicate_configuration', 'soeasy_ajax_duplicate_configuration');
+
+/**
+ * AJAX : Vider la session WooCommerce
+ * 
+ * Utilisé lors de la réconciliation pour nettoyer les données obsolètes.
+ * 
+ * POST params:
+ * - nonce : soeasy_config_action
+ * 
+ * Response:
+ * - success: { message: '...' }
+ */
+function soeasy_ajax_clear_session() {
+    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+    
+    // Vider la session WooCommerce
+    if (function_exists('WC') && WC()->session) {
+        WC()->session->set('soeasy_configurateur', []);
+        WC()->session->set('soeasy_duree_engagement', 0);
+        WC()->session->set('soeasy_mode_financement', '');
+        
+        // Vider aussi le panier
+        WC()->cart->empty_cart();
+    }
+    
+    wp_send_json_success(['message' => 'Session vidée avec succès']);
+}
+add_action('wp_ajax_soeasy_ajax_clear_session', 'soeasy_ajax_clear_session');
+add_action('wp_ajax_nopriv_soeasy_ajax_clear_session', 'soeasy_ajax_clear_session');
+
+/**
+ * AJAX : Synchroniser localStorage vers session PHP
+ * 
+ * Envoie toute la config localStorage en session WooCommerce.
+ * 
+ * POST params:
+ * - config : Objet configuration complet (JSON string)
+ * - nonce : soeasy_config_action
+ * 
+ * Response:
+ * - success: { message: '...' }
+ */
+function soeasy_ajax_sync_config_to_session() {
+    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+    
+    $config = $_POST['config'] ?? [];
+    
+    // Si config est un string JSON, le décoder
+    if (is_string($config)) {
+        $config = json_decode($config, true);
+    }
+    
+    if (!function_exists('WC') || !WC()->session) {
+        wp_send_json_error(['message' => 'Session WooCommerce non disponible']);
+    }
+    
+    // Sauvegarder en session
+    if (isset($config['config'])) {
+        WC()->session->set('soeasy_configurateur', $config['config']);
+    }
+    
+    if (isset($config['dureeEngagement'])) {
+        WC()->session->set('soeasy_duree_engagement', intval($config['dureeEngagement']));
+    }
+    
+    if (isset($config['modeFinancement'])) {
+        WC()->session->set('soeasy_mode_financement', $config['modeFinancement']);
+    }
+    
+    wp_send_json_success(['message' => 'Configuration synchronisée en session']);
+}
+add_action('wp_ajax_soeasy_ajax_sync_config_to_session', 'soeasy_ajax_sync_config_to_session');
+add_action('wp_ajax_nopriv_soeasy_ajax_sync_config_to_session', 'soeasy_ajax_sync_config_to_session');
+
+/**
+ * AJAX : Vérifier si la session contient une configuration
+ * 
+ * Utilisé par la réconciliation pour détecter les incohérences.
+ * 
+ * POST params:
+ * - nonce : soeasy_config_action
+ * 
+ * Response:
+ * - success: { hasConfig: true/false }
+ */
+function soeasy_ajax_check_session_config() {
+    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+    
+    $hasConfig = false;
+    
+    if (function_exists('WC') && WC()->session) {
+        $session_config = WC()->session->get('soeasy_configurateur', []);
+        $hasConfig = !empty($session_config);
+    }
+    
+    wp_send_json_success(['hasConfig' => $hasConfig]);
+}
+add_action('wp_ajax_soeasy_ajax_check_session_config', 'soeasy_ajax_check_session_config');
+add_action('wp_ajax_nopriv_soeasy_ajax_check_session_config', 'soeasy_ajax_check_session_config');
+
+/**
+ * AJAX : Charger la dernière configuration de l'utilisateur
+ * 
+ * Utilisé pour restauration automatique après déconnexion.
+ * 
+ * POST params:
+ * - nonce : soeasy_config_action
+ * 
+ * Response:
+ * - success: { config: {...}, config_id: 123, config_name: '...' } ou { config: null }
+ */
+function soeasy_ajax_load_last_configuration() {
+    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+    
+    $user_id = get_current_user_id();
+    
+    if (!$user_id) {
+        wp_send_json_error(['message' => 'Utilisateur non connecté']);
+    }
+    
+    // Récupérer la dernière config
+    $config = soeasy_get_last_user_configuration($user_id);
+    
+    if (!$config) {
+        wp_send_json_success([
+            'config' => null,
+            'message' => 'Aucune configuration trouvée'
+        ]);
+    }
+    
+    // Décoder le JSON
+    $config_decoded = json_decode($config->config_data, true);
+    
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        wp_send_json_error(['message' => 'Erreur de décodage JSON']);
+    }
+    
+    wp_send_json_success([
+        'config' => $config_decoded,
+        'config_id' => $config->id,
+        'config_name' => $config->config_name,
+        'status' => $config->status,
+        'updated_at' => $config->updated_at
+    ]);
+}
+add_action('wp_ajax_soeasy_ajax_load_last_configuration', 'soeasy_ajax_load_last_configuration');
+
+/**
+ * AJAX : Mettre à jour le statut d'une configuration (admin)
+ * 
+ * POST params:
+ * - config_id : ID de la configuration
+ * - status : Nouveau statut (draft/active/archived/completed)
+ * - nonce : soeasy_config_action
+ * 
+ * Response:
+ * - success: { message: '...' }
+ */
+function soeasy_ajax_update_config_status() {
+    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+    
+    // Vérifier droits admin
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(['message' => 'Accès non autorisé']);
+    }
+    
+    $config_id = intval($_POST['config_id'] ?? 0);
+    $status = sanitize_text_field($_POST['status'] ?? '');
+    
+    if (!$config_id || !$status) {
+        wp_send_json_error(['message' => 'Paramètres manquants']);
+    }
+    
+    // Valider le statut
+    $valid_statuses = ['draft', 'active', 'archived', 'completed'];
+    if (!in_array($status, $valid_statuses)) {
+        wp_send_json_error(['message' => 'Statut invalide']);
+    }
+    
+    // Mettre à jour
+    $updated = soeasy_update_configuration($config_id, null, null, $status);
+    
+    if (!$updated) {
+        wp_send_json_error(['message' => 'Erreur lors de la mise à jour']);
+    }
+    
+    wp_send_json_success(['message' => 'Statut mis à jour avec succès']);
+}
+add_action('wp_ajax_soeasy_ajax_update_config_status', 'soeasy_ajax_update_config_status');
+
+/**
+ * AJAX : Ajouter/modifier les notes admin d'une configuration
+ * 
+ * POST params:
+ * - config_id : ID de la configuration
+ * - notes : Texte des notes
+ * - nonce : soeasy_config_action
+ */
+function soeasy_ajax_update_config_notes() {
+    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+    
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(['message' => 'Accès non autorisé']);
+    }
+    
+    global $wpdb;
+    
+    $config_id = intval($_POST['config_id'] ?? 0);
+    $notes = sanitize_textarea_field($_POST['notes'] ?? '');
+    
+    if (!$config_id) {
+        wp_send_json_error(['message' => 'ID manquant']);
+    }
+    
+    $table = $wpdb->prefix . 'soeasy_configurations';
+    
+    $result = $wpdb->update(
+        $table,
+        ['notes' => $notes, 'updated_at' => current_time('mysql')],
+        ['id' => $config_id],
+        ['%s', '%s'],
+        ['%d']
+    );
+    
+    if ($result === false) {
+        wp_send_json_error(['message' => 'Erreur lors de la mise à jour']);
+    }
+    
+    wp_send_json_success(['message' => 'Notes enregistrées']);
+}
+add_action('wp_ajax_soeasy_ajax_update_config_notes', 'soeasy_ajax_update_config_notes');
+
+/**
+ * ============================================================================
+ * FIN DES ENDPOINTS AJAX CONFIGURATIONS
+ * ============================================================================
+ */
+
 ?>
