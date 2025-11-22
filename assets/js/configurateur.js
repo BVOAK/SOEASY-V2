@@ -679,7 +679,7 @@ jQuery(document).ready(function ($) {
         data: {
           action: 'soeasy_ajax_sync_adresses_to_session',
           adresses: JSON.stringify(adresses),
-          nonce: soeasyVars.nonce_config
+          nonce: soeasyVars.nonce_address
         },
         success: function (syncResponse) {
           console.log('✅ Adresses synchronisées en session:', syncResponse);

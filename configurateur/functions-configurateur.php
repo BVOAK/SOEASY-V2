@@ -416,7 +416,7 @@ function soeasy_get_adresses_json_for_js() {
  * CRITIQUE : Résout le bug d'accès étape 2 en mode connecté
  */
 function ajax_soeasy_verify_adresses_in_session() {
-    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_address_action');
     
     $adresses = soeasy_get_adresses_configurateur();
     $count = count($adresses);
@@ -1614,7 +1614,7 @@ add_action('wp_ajax_soeasy_ajax_update_config_notes', 'soeasy_ajax_update_config
  * - success: { message: '...' }
  */
 function soeasy_ajax_sync_adresses_to_session() {
-    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_address_action');
     
     $adresses = $_POST['adresses'] ?? '[]';
     
