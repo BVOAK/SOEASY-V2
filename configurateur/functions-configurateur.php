@@ -42,7 +42,14 @@ function soeasy_session_delete($key)
  * Fonctions générales
  */
 function soeasy_get_adresses_configurateur() {
+    error_log('=== GET ADRESSES CONFIGURATEUR ===');
+    
+    // Forcer l'initialisation de la session
+    soeasy_start_session_if_needed();
+    
     $adresses = soeasy_session_get('soeasy_config_adresses', []);
+    error_log('Adresses lues depuis session: ' . print_r($adresses, true));
+    error_log('Nombre d\'adresses: ' . count($adresses));
     
     $enriched = [];
     foreach ($adresses as $adresse) {
@@ -60,6 +67,9 @@ function soeasy_get_adresses_configurateur() {
             ];
         }
     }
+    
+    error_log('Adresses enrichies retournées: ' . count($enriched));
+    error_log('=== FIN GET ADRESSES ===');
     
     return $enriched;
 }
@@ -1614,23 +1624,57 @@ add_action('wp_ajax_soeasy_ajax_update_config_notes', 'soeasy_ajax_update_config
  * - success: { message: '...' }
  */
 function soeasy_ajax_sync_adresses_to_session() {
-    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_address_action');
+    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+    
+    error_log('=== SYNC ADRESSES TO SESSION ===');
     
     $adresses = $_POST['adresses'] ?? '[]';
+    error_log('Adresses reçues (raw): ' . print_r($adresses, true));
+    error_log('Type: ' . gettype($adresses));
     
-    // Si c'est un string JSON, le décoder
+    // Gérer les deux formats possibles
     if (is_string($adresses)) {
-        $adresses = json_decode($adresses, true);
+        // Format string JSON : décoder
+        $decoded = json_decode($adresses, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+            $adresses = $decoded;
+            error_log('✅ Décodage JSON réussi');
+        } else {
+            error_log('❌ Échec décodage JSON: ' . json_last_error_msg());
+            wp_send_json_error(['message' => 'Format JSON invalide']);
+        }
+    } elseif (!is_array($adresses)) {
+        // Ni string ni array : erreur
+        error_log('❌ Type invalide: ' . gettype($adresses));
+        wp_send_json_error(['message' => 'Format d\'adresses invalide (type: ' . gettype($adresses) . ')']);
     }
     
+    // À ce stade, $adresses DOIT être un array
     if (!is_array($adresses)) {
-        wp_send_json_error(['message' => 'Format d\'adresses invalide']);
+        error_log('❌ Toujours pas un array après traitement');
+        wp_send_json_error(['message' => 'Impossible de convertir les adresses en array']);
+    }
+    
+    error_log('Adresses après traitement: ' . print_r($adresses, true));
+    error_log('Nombre d\'adresses: ' . count($adresses));
+    
+    // Vérifier que WooCommerce est chargé
+    if (!function_exists('WC') || !WC()->session) {
+        error_log('❌ WooCommerce session non disponible');
+        wp_send_json_error(['message' => 'Session WooCommerce non disponible']);
     }
     
     // Enrichir les adresses si nécessaire
     $enriched_addresses = [];
     foreach ($adresses as $adr) {
         $adresse_text = is_array($adr) ? ($adr['adresse'] ?? '') : $adr;
+        
+        if (empty($adresse_text)) {
+            error_log('⚠️ Adresse vide, skip');
+            continue; // Skip les adresses vides
+        }
+        
+        error_log('Processing adresse: ' . $adresse_text);
         
         $enriched_addresses[] = [
             'adresse' => $adresse_text,
@@ -1640,12 +1684,46 @@ function soeasy_ajax_sync_adresses_to_session() {
         ];
     }
     
+    error_log('Adresses enrichies: ' . print_r($enriched_addresses, true));
+    error_log('Nombre d\'adresses enrichies: ' . count($enriched_addresses));
+    
+    if (count($enriched_addresses) === 0) {
+        error_log('❌ Aucune adresse valide à sauvegarder');
+        wp_send_json_error(['message' => 'Aucune adresse valide à sauvegarder']);
+    }
+    
     // Sauvegarder en session
-    soeasy_session_set('soeasy_config_adresses', $enriched_addresses);
+    WC()->session->set('soeasy_config_adresses', $enriched_addresses);
+    error_log('✅ WC()->session->set() appelé');
+    
+    // ✅ CRITIQUE : Forcer le commit en base de données
+    if (method_exists(WC()->session, 'save_data')) {
+        WC()->session->save_data();
+        error_log('✅ Session save_data() appelé');
+    }
+    
+    // Vérification immédiate
+    $check = WC()->session->get('soeasy_config_adresses', []);
+    error_log('Vérification immédiate après save: ' . count($check) . ' adresse(s)');
+    
+    if (count($check) === 0) {
+        error_log('❌ PROBLÈME : Session vide après save !');
+        wp_send_json_error([
+            'message' => 'Erreur : Les adresses n\'ont pas pu être sauvegardées en session',
+            'debug' => [
+                'sent_count' => count($enriched_addresses),
+                'saved_count' => count($check)
+            ]
+        ]);
+    }
+    
+    error_log('✅ Synchronisation réussie');
+    error_log('=== FIN SYNC ADRESSES ===');
     
     wp_send_json_success([
         'message' => 'Adresses synchronisées en session',
-        'count' => count($enriched_addresses)
+        'count' => count($enriched_addresses),
+        'addresses' => $enriched_addresses
     ]);
 }
 add_action('wp_ajax_soeasy_ajax_sync_adresses_to_session', 'soeasy_ajax_sync_adresses_to_session');
