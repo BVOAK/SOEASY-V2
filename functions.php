@@ -475,6 +475,13 @@ function soeasy_enqueue_configurateur_assets_conditionnel() {
             true
         );
 
+		wp_enqueue_script(
+            'soeasy-reconciliation',
+            get_template_directory_uri() . '/assets/js/config-reconciliation.js',
+            array('jquery'),
+            '1.0.0',
+            true
+        );
 
         wp_enqueue_script(
             'soeasy-configurateur',
@@ -490,14 +497,6 @@ function soeasy_enqueue_configurateur_assets_conditionnel() {
             [],
             null,
             true
-        );
-
-		wp_enqueue_script(
-            'soeasy-reconciliation',
-            get_template_directory_uri() . '/assets/js/config-reconciliation.js',
-            array('jquery'), // Dépend de jQuery
-            '1.0.0',
-            true // Charger dans le footer
         );
 
         wp_localize_script('soeasy-configurateur', 'soeasyVars', array(
