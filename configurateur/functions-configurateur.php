@@ -1625,9 +1625,58 @@ function soeasy_ajax_update_config_notes() {
 add_action('wp_ajax_soeasy_ajax_update_config_notes', 'soeasy_ajax_update_config_notes');
 
 /**
+ * AJAX : Synchroniser les adresses vers la session PHP
+ * 
+ * POST params:
+ * - adresses : Array d'adresses (JSON string)
+ * - nonce : soeasy_config_action
+ * 
+ * Response:
+ * - success: { message: '...' }
+ */
+function soeasy_ajax_sync_adresses_to_session() {
+    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+    
+    $adresses = $_POST['adresses'] ?? '[]';
+    
+    // Si c'est un string JSON, le décoder
+    if (is_string($adresses)) {
+        $adresses = json_decode($adresses, true);
+    }
+    
+    if (!is_array($adresses)) {
+        wp_send_json_error(['message' => 'Format d\'adresses invalide']);
+    }
+    
+    // Enrichir les adresses si nécessaire
+    $enriched_addresses = [];
+    foreach ($adresses as $adr) {
+        $adresse_text = is_array($adr) ? ($adr['adresse'] ?? '') : $adr;
+        
+        $enriched_addresses[] = [
+            'adresse' => $adresse_text,
+            'services' => is_array($adr) ? ($adr['services'] ?? []) : [],
+            'ville_courte' => soeasy_get_ville_courte($adresse_text),
+            'ville_longue' => soeasy_get_ville_longue($adresse_text)
+        ];
+    }
+    
+    // Sauvegarder en session
+    soeasy_session_set('soeasy_config_adresses', $enriched_addresses);
+    
+    wp_send_json_success([
+        'message' => 'Adresses synchronisées en session',
+        'count' => count($enriched_addresses)
+    ]);
+}
+add_action('wp_ajax_soeasy_ajax_sync_adresses_to_session', 'soeasy_ajax_sync_adresses_to_session');
+add_action('wp_ajax_nopriv_soeasy_ajax_sync_adresses_to_session', 'soeasy_ajax_sync_adresses_to_session');
+
+/**
  * ============================================================================
  * FIN DES ENDPOINTS AJAX CONFIGURATIONS
  * ============================================================================
  */
+
 
 ?>

@@ -2,16 +2,15 @@
  * =====================================================
  * MODULE DE RÉCONCILIATION LOCALSTORAGE ↔ SESSION PHP
  * =====================================================
- * VERSION 1.1 - Corrige les problèmes de synchronisation
+ * VERSION 1.2 - Correction sync adresses
  * 
- * @version 1.1.0
+ * @version 1.2.0
  * @date 2025-01-22
  */
 
 (function($) {
   'use strict';
 
-  // Flag pour éviter les boucles infinies de rechargement
   const RECONCILIATION_FLAG = 'soeasy_reconciliation_done';
   const RECONCILIATION_TIMESTAMP = 'soeasy_last_reconciliation';
 
@@ -61,8 +60,6 @@
 
     keys.forEach(key => localStorage.removeItem(key));
     console.log('🧹 localStorage vidé');
-    
-    // Déclencher un événement custom pour notifier les autres modules
     $(document).trigger('soeasy:localStorage:cleared');
   }
 
@@ -95,11 +92,20 @@
       localStorage.setItem('soeasyLastSync', new Date().toISOString());
       console.log('✅ Configuration restaurée dans localStorage');
 
-      // Déclencher un événement custom
       $(document).trigger('soeasy:localStorage:restored', [configData]);
+      
+      // ✅ CRITIQUE : Synchroniser les adresses en session PHP
+      return $.post(soeasyVars.ajaxurl, {
+        action: 'soeasy_ajax_sync_adresses_to_session',
+        adresses: JSON.stringify(configData.adresses || []),
+        nonce: soeasyVars.nonce_config
+      }).done(function() {
+        console.log('✅ Adresses restaurées en session PHP');
+      });
 
     } catch (e) {
       console.error('❌ Erreur restauration localStorage:', e);
+      return Promise.reject(e);
     }
   }
 
@@ -135,7 +141,23 @@
   }
 
   function syncLocalStorageToSession(localConfig) {
-    return $.post(soeasyVars.ajaxurl, {
+    // ✅ ÉTAPE 1 : Synchroniser les adresses EN PREMIER
+    const adressesPromise = $.post(soeasyVars.ajaxurl, {
+      action: 'soeasy_ajax_sync_adresses_to_session',
+      adresses: JSON.stringify(localConfig.adresses || []),
+      nonce: soeasyVars.nonce_config
+    })
+    .done(function(response) {
+      if (response.success) {
+        console.log('✅ Adresses synchronisées:', response.data.count);
+      }
+    })
+    .fail(function() {
+      console.warn('⚠️ Échec sync adresses (non bloquant)');
+    });
+
+    // ✅ ÉTAPE 2 : Synchroniser la config
+    const configPromise = $.post(soeasyVars.ajaxurl, {
       action: 'soeasy_ajax_sync_config_to_session',
       config: JSON.stringify(localConfig),
       nonce: soeasyVars.nonce_config
@@ -146,12 +168,15 @@
         updateLastSyncTimestamp();
         $(document).trigger('soeasy:session:synced', [localConfig]);
       } else {
-        console.warn('⚠️ Échec sync session:', response.data?.message);
+        console.warn('⚠️ Échec sync config:', response.data?.message);
       }
     })
     .fail(function(xhr, status, error) {
-      console.warn('⚠️ Erreur AJAX sync session:', error);
+      console.warn('⚠️ Erreur AJAX sync config:', error);
     });
+
+    // Retourner Promise qui attend les 2
+    return Promise.all([adressesPromise, configPromise]);
   }
 
   function loadLastConfigurationFromDB(userId) {
@@ -163,13 +188,21 @@
       if (response.success && response.data.config) {
         console.log('💾 Configuration chargée depuis la DB:', response.data.config_name);
         
-        // Restaurer dans localStorage
-        restoreConfigurationToLocalStorage(response.data.config, userId);
-        
-        // Synchroniser en session
-        return syncLocalStorageToSession(response.data.config).then(function() {
-          return response.data.config;
-        });
+        // Restaurer dans localStorage (restaure aussi adresses en session)
+        return restoreConfigurationToLocalStorage(response.data.config, userId)
+          .then(function() {
+            // Synchroniser la config complète
+            return syncLocalStorageToSession(response.data.config);
+          })
+          .then(function() {
+            // ✅ Forcer rechargement pour rafraîchir DOM
+            console.log('🔄 Rechargement pour actualiser l\'affichage...');
+            if (!hasRecentReconciliation()) {
+              markReconciliationDone();
+              location.reload();
+            }
+            return response.data.config;
+          });
       } else {
         console.log('ℹ️ Aucune configuration trouvée en DB');
         return null;
@@ -228,34 +261,23 @@
 
   /**
    * ========================================
-   * GESTION DU RECHARGEMENT DE PAGE
+   * GESTION DU RECHARGEMENT
    * ========================================
    */
 
-  /**
-   * Vérifie si une réconciliation récente a eu lieu
-   * @returns {boolean}
-   */
   function hasRecentReconciliation() {
     const lastReconciliation = sessionStorage.getItem(RECONCILIATION_TIMESTAMP);
     if (!lastReconciliation) return false;
 
     const timeDiff = Date.now() - parseInt(lastReconciliation);
-    // Considérer comme récent si moins de 3 secondes
     return timeDiff < 3000;
   }
 
-  /**
-   * Marque qu'une réconciliation vient d'avoir lieu
-   */
   function markReconciliationDone() {
     sessionStorage.setItem(RECONCILIATION_FLAG, 'true');
     sessionStorage.setItem(RECONCILIATION_TIMESTAMP, Date.now().toString());
   }
 
-  /**
-   * Recharge la page si nécessaire après réconciliation
-   */
   function reloadPageIfNeeded() {
     if (!hasRecentReconciliation()) {
       console.log('🔄 Rechargement de la page pour appliquer les changements...');
@@ -268,21 +290,20 @@
 
   /**
    * ========================================
-   * FONCTION PRINCIPALE DE RÉCONCILIATION
+   * FONCTION PRINCIPALE
    * ========================================
    */
 
   window.reconcileConfiguration = function(forceReload = false) {
     console.log('🔄 === DÉBUT RÉCONCILIATION ===');
 
-    // Éviter les boucles infinies
     if (hasRecentReconciliation() && !forceReload) {
       console.log('⏭️ Réconciliation récente détectée, skip');
       return Promise.resolve();
     }
 
     if (typeof soeasyVars === 'undefined') {
-      console.error('❌ soeasyVars non défini, impossible de continuer');
+      console.error('❌ soeasyVars non défini');
       return Promise.reject('soeasyVars non défini');
     }
 
@@ -296,9 +317,7 @@
       return Promise.reject('Erreur lecture localStorage');
     }
 
-    // ========================================
-    // CAS 1 : UTILISATEUR NON CONNECTÉ
-    // ========================================
+    // CAS 1 : NON CONNECTÉ
     if (currentUserId === 0) {
       console.log('ℹ️ Utilisateur non connecté');
 
@@ -314,19 +333,14 @@
       });
     }
 
-    // ========================================
-    // CAS 2 : UTILISATEUR CONNECTÉ
-    // ========================================
+    // CAS 2 : CONNECTÉ
     console.log('ℹ️ Utilisateur connecté');
 
     if (localConfig.userId && localConfig.userId !== currentUserId) {
-      // ========================================
-      // CONFLIT : Configuration d'un autre utilisateur
-      // ========================================
+      // CONFLIT
       console.warn('⚠️ CONFLIT DÉTECTÉ !');
-      console.warn(`   → localStorage contient userId=${localConfig.userId}`);
+      console.warn(`   → localStorage userId=${localConfig.userId}`);
       console.warn(`   → Utilisateur actuel = ${currentUserId}`);
-      console.warn('   → Nettoyage complet et chargement config utilisateur');
 
       clearLocalStorageConfig();
 
@@ -334,16 +348,12 @@
         console.log('💾 Chargement dernière configuration...');
         return loadLastConfigurationFromDB(currentUserId);
       }).then(function() {
-        // Recharger la page pour réinitialiser le DOM
         if (!hasRecentReconciliation()) {
           reloadPageIfNeeded();
         }
       });
     }
 
-    // ========================================
-    // User_id match OU pas encore défini
-    // ========================================
     ensureUserIdInLocalStorage();
 
     if (localConfig.config && Object.keys(localConfig.config).length > 0) {
@@ -359,18 +369,12 @@
     });
   };
 
-  /**
-   * ========================================
-   * FONCTION DE NETTOYAGE COMPLET AVEC RELOAD
-   * ========================================
-   */
   window.clearConfigurationAndReload = function() {
     if (!confirm('Voulez-vous vraiment effacer toute la configuration ?\n\nCette action est irréversible.')) {
       return;
     }
 
     console.log('🗑️ Nettoyage complet demandé');
-    
     clearLocalStorageConfig();
     
     clearSessionConfig().then(function() {
@@ -383,14 +387,15 @@
 
   /**
    * ========================================
-   * HELPERS POUR DEBUGGING
+   * HELPERS DEBUGGING
    * ========================================
    */
+
   window.SoEasyReconciliation = {
     getConfig: getLocalStorageConfig,
     clearLocal: function() {
       clearLocalStorageConfig();
-      console.log('💡 Utilisez clearConfigurationAndReload() pour recharger la page automatiquement');
+      console.log('💡 Utilisez clearAndReload() pour recharger la page');
     },
     clearSession: clearSessionConfig,
     syncToSession: syncLocalStorageToSession,
@@ -411,9 +416,10 @@
 
   /**
    * ========================================
-   * INITIALISATION AUTOMATIQUE
+   * INITIALISATION
    * ========================================
    */
+
   $(document).ready(function() {
     
     if (typeof soeasyVars === 'undefined') {
@@ -422,13 +428,12 @@
     }
 
     if ($('.config-step').length === 0 && !$('#configurateur-container').length) {
-      console.log('ℹ️ Pas sur une page configurateur, pas de réconciliation');
+      console.log('ℹ️ Pas sur une page configurateur');
       return;
     }
 
     console.log('🎯 Page configurateur détectée, lancement réconciliation...');
 
-    // IMPORTANT : Attendre un peu que page-configurateur.php injecte les adresses PHP
     setTimeout(function() {
       window.reconcileConfiguration()
         .then(function() {
@@ -438,7 +443,7 @@
           console.error('❌ === ERREUR RÉCONCILIATION ===');
           console.error(error);
         });
-    }, 100); // Délai de 100ms pour laisser le script PHP s'exécuter
+    }, 100);
   });
 
 })(jQuery);
