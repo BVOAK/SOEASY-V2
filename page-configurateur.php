@@ -19,20 +19,19 @@ get_header();
 </div>
 
 <script>
-	// On laisse la réconciliation gérer ça
-	(function() {
-		const soeasyAdresses = <?php echo json_encode(soeasy_get_adresses_configurateur()); ?>;
-		
-		// Uniquement injecter si localStorage est vide ET qu'il y a des adresses en session
-		const localAdresses = localStorage.getItem('soeasyAdresses');
-		
-		if (!localAdresses && soeasyAdresses && soeasyAdresses.length > 0) {
-			console.log('📋 Injection adresses PHP dans localStorage (localStorage vide)');
-			localStorage.setItem('soeasyAdresses', JSON.stringify(soeasyAdresses));
-		} else if (localAdresses) {
-			console.log('⏭️ localStorage contient déjà des adresses, skip injection PHP');
-		}
-	})();
+  (function() {
+    const soeasyAdresses = <?php echo json_encode(soeasy_get_adresses_configurateur()); ?>;
+    
+    // ✅ NE PAS écraser si localStorage contient déjà des adresses
+    const localAdresses = localStorage.getItem('soeasyAdresses');
+    
+    if (!localAdresses && soeasyAdresses && soeasyAdresses.length > 0) {
+      console.log('📋 Injection adresses PHP (localStorage vide)');
+      localStorage.setItem('soeasyAdresses', JSON.stringify(soeasyAdresses));
+    } else if (localAdresses) {
+      console.log('⏭️ localStorage contient déjà des adresses, skip injection PHP');
+    }
+  })();
 </script>
 
 <?php get_footer(); ?>

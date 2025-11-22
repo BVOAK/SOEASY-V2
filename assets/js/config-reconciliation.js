@@ -92,16 +92,16 @@
       localStorage.setItem('soeasyLastSync', new Date().toISOString());
       console.log('✅ Configuration restaurée dans localStorage');
 
-      $(document).trigger('soeasy:localStorage:restored', [configData]);
-      
-      // ✅ CRITIQUE : Synchroniser les adresses en session PHP
-      return $.post(soeasyVars.ajaxurl, {
+      (document).trigger('soeasy:localStorage:restored', [configData]);
+
+        // ✅ CRITIQUE : Synchroniser les adresses en session PHP
+        return $.post(soeasyVars.ajaxurl, {
         action: 'soeasy_ajax_sync_adresses_to_session',
         adresses: JSON.stringify(configData.adresses || []),
         nonce: soeasyVars.nonce_config
-      }).done(function() {
+        }).done(function() {
         console.log('✅ Adresses restaurées en session PHP');
-      });
+        });
 
     } catch (e) {
       console.error('❌ Erreur restauration localStorage:', e);
@@ -143,41 +143,41 @@
   function syncLocalStorageToSession(localConfig) {
     // ✅ ÉTAPE 1 : Synchroniser les adresses EN PREMIER
     const adressesPromise = $.post(soeasyVars.ajaxurl, {
-      action: 'soeasy_ajax_sync_adresses_to_session',
-      adresses: JSON.stringify(localConfig.adresses || []),
-      nonce: soeasyVars.nonce_config
+        action: 'soeasy_ajax_sync_adresses_to_session',
+        adresses: JSON.stringify(localConfig.adresses || []),
+        nonce: soeasyVars.nonce_config
     })
     .done(function(response) {
-      if (response.success) {
+        if (response.success) {
         console.log('✅ Adresses synchronisées:', response.data.count);
-      }
+        }
     })
     .fail(function() {
-      console.warn('⚠️ Échec sync adresses (non bloquant)');
+        console.warn('⚠️ Échec sync adresses');
     });
 
     // ✅ ÉTAPE 2 : Synchroniser la config
     const configPromise = $.post(soeasyVars.ajaxurl, {
-      action: 'soeasy_ajax_sync_config_to_session',
-      config: JSON.stringify(localConfig),
-      nonce: soeasyVars.nonce_config
+        action: 'soeasy_ajax_sync_config_to_session',
+        config: JSON.stringify(localConfig),
+        nonce: soeasyVars.nonce_config
     })
     .done(function(response) {
-      if (response.success) {
+        if (response.success) {
         console.log('✅ Configuration synchronisée en session PHP');
         updateLastSyncTimestamp();
         $(document).trigger('soeasy:session:synced', [localConfig]);
-      } else {
+        } else {
         console.warn('⚠️ Échec sync config:', response.data?.message);
-      }
+        }
     })
     .fail(function(xhr, status, error) {
-      console.warn('⚠️ Erreur AJAX sync config:', error);
+        console.warn('⚠️ Erreur AJAX sync config:', error);
     });
 
-    // Retourner Promise qui attend les 2
+    // ✅ Retourner Promise qui attend les 2
     return Promise.all([adressesPromise, configPromise]);
-  }
+    }
 
   function loadLastConfigurationFromDB(userId) {
     return $.post(soeasyVars.ajaxurl, {
@@ -336,7 +336,7 @@
     // CAS 2 : CONNECTÉ
     console.log('ℹ️ Utilisateur connecté');
 
-    if (localConfig.userId && localConfig.userId !== currentUserId) {
+    if (typeof localConfig.userId !== 'undefined' && localConfig.userId !== currentUserId) {
       // CONFLIT
       console.warn('⚠️ CONFLIT DÉTECTÉ !');
       console.warn(`   → localStorage userId=${localConfig.userId}`);

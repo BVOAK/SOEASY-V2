@@ -1,5 +1,31 @@
 jQuery(document).ready(function ($) {
 
+  console.log('🎯 Initialisation configurateur...');
+  
+  // ✅ RÉCONCILIATION EN PREMIER
+  if (typeof window.reconcileConfiguration === 'function') {
+    console.log('🔄 Appel de la réconciliation...');
+    
+    window.reconcileConfiguration()
+      .then(function() {
+        console.log('✅ Réconciliation terminée, démarrage configurateur');
+        
+        // Charger l'étape mémorisée
+        const currentStep = localStorage.getItem('soeasyCurrentStep') || '1';
+        loadStep(currentStep);
+      })
+      .catch(function(error) {
+        console.error('❌ Erreur réconciliation:', error);
+        // Continuer quand même
+        const currentStep = localStorage.getItem('soeasyCurrentStep') || '1';
+        loadStep(currentStep);
+      });
+  } else {
+    console.warn('⚠️ Module de réconciliation non chargé');
+    const currentStep = localStorage.getItem('soeasyCurrentStep') || '1';
+    loadStep(currentStep);
+  }
+
   // === Étape suivante ===
   $(document).on('click', '.btn-suivant', function (e) {
     e.preventDefault();
@@ -193,8 +219,8 @@ jQuery(document).ready(function ($) {
   }
 
   // Rechargement automatique de l'étape mémorisée
-  const currentStep = localStorage.getItem('soeasyCurrentStep') || '1';
-  loadStep(currentStep);
+/*   const currentStep = localStorage.getItem('soeasyCurrentStep') || '1';
+  loadStep(currentStep); */
 
   // Fonction de chargement des étapes
   function loadStep(step) {
@@ -902,7 +928,7 @@ jQuery(document).ready(function ($) {
       const qty = parseInt($input.val()) || 0;
       const index = $input.data('index');
       const id = $input.data('id');
-      
+
       const $checkbox = $input.closest('.item-product').find(`.forfait-checkbox[data-id="${id}"], .mobile-checkbox[data-id="${id}"]`);
 
       $checkbox.prop('checked', qty > 0);
@@ -1535,38 +1561,38 @@ jQuery(document).ready(function ($) {
    * Initialisation des événements de l'étape 6 (Récapitulatif final)
    */
 
-window.initStep6Events = function () {
-  console.log('🎯 Initialisation Step 6 Events avec localStorage');
+  window.initStep6Events = function () {
+    console.log('🎯 Initialisation Step 6 Events avec localStorage');
 
-  // 1. Génération immédiate du contenu
-  if (typeof generateStep6Content === 'function') {
-    generateStep6Content();
-  } else {
-    console.error('❌ Fonction generateStep6Content non trouvée');
-    $('#step6-loader').hide();
-    $('#step6-content').html(`
+    // 1. Génération immédiate du contenu
+    if (typeof generateStep6Content === 'function') {
+      generateStep6Content();
+    } else {
+      console.error('❌ Fonction generateStep6Content non trouvée');
+      $('#step6-loader').hide();
+      $('#step6-content').html(`
       <div class="alert alert-danger">
         <h5>Erreur de chargement</h5>
         <p>Une fonction JavaScript est manquante. Veuillez recharger la page.</p>
         <button class="btn btn-primary" onclick="location.reload()">Recharger</button>
       </div>
     `).show();
-  }
-
-  // 2. Événement bouton "Commander" (Ajouter au panier)
-  $(document).off('click', '#btn-commander').on('click', '#btn-commander', function(e) {
-    e.preventDefault();
-    
-    if (typeof sendToCart === 'function') {
-      sendToCart();
-    } else {
-      console.error('❌ Fonction sendToCart non trouvée');
-      alert('Erreur technique. La fonction de commande n\'est pas disponible.');
     }
-  });
 
-  console.log('✅ Step 6 Events initialisés');
-};
+    // 2. Événement bouton "Commander" (Ajouter au panier)
+    $(document).off('click', '#btn-commander').on('click', '#btn-commander', function (e) {
+      e.preventDefault();
+
+      if (typeof sendToCart === 'function') {
+        sendToCart();
+      } else {
+        console.error('❌ Fonction sendToCart non trouvée');
+        alert('Erreur technique. La fonction de commande n\'est pas disponible.');
+      }
+    });
+
+    console.log('✅ Step 6 Events initialisés');
+  };
 
   /**
  * =============================================================================
@@ -1576,7 +1602,7 @@ window.initStep6Events = function () {
 
   // Event listeners pour la sidebar - À ajouter à la fin de configurateur.js
   document.addEventListener('sidebarOpened', function () {
-  
+
     // Recalculer les totaux si nécessaire
     if (typeof updateSidebarTotauxRecap === 'function') {
       updateSidebarTotauxRecap();
