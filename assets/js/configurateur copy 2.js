@@ -531,14 +531,17 @@ jQuery(document).ready(function ($) {
     // Appeler la vérification au chargement de l'étape
     checkAdressesAndToggleButton();
 
-    // Ajout d'adresse
+    // Ajout d’adresse
     $('#form-ajout-adresse').on('submit', function (e) {
       e.preventDefault();
 
       const adresse = $('#adresse').val();
       const services = [];
+      /* $('input[name="services[]"]:checked').each(function () {
+        services.push($(this).val());
+      }); */
 
-      if (adresse.length === 0) {
+      if (adresse.length === 0 /* || services.length === 0 */) {
         alert("Merci de renseigner une adresse.");
         return;
       }
@@ -549,6 +552,7 @@ jQuery(document).ready(function ($) {
         data: {
           action: 'soeasy_add_adresse_configurateur',
           adresse: adresse,
+          //services: services
           nonce: soeasyVars.nonce_address
         },
         success: function (response) {
@@ -584,12 +588,11 @@ jQuery(document).ready(function ($) {
           alert("Une erreur technique est survenue.");
         }
       });
+
     });
 
-    // Suppression d'adresse
-    $(document).off('click', '.btn-remove-adresse').on('click', '.btn-remove-adresse', function (e) {
-      e.preventDefault();
-
+    // Suppression d’une adresse
+    $(document).on('click', '.btn-remove-adresse', function () {
       const index = $(this).data('index');
 
       $.ajax({
@@ -600,132 +603,24 @@ jQuery(document).ready(function ($) {
           index: index,
           nonce: soeasyVars.nonce_address
         },
-        success: function (response) {
-          if (response.success) {
-            // Vérifier s'il reste des adresses après suppression
-            const remainingAddresses = response.data || [];
-
-            if (remainingAddresses.length === 0) {
-              $('#liste-adresses').html('<p class="text-muted">Aucune adresse enregistrée pour le moment.</p>');
-              $('.btn-suivant').addClass('disabled');
-            } else {
-              // Régénérer la liste HTML
-              let html = '<h5>Adresses enregistrées :</h5><ul class="list-group mb-4">';
-              remainingAddresses.forEach((adr, i) => {
-                html += `
-                <li class="list-group-item d-flex justify-content-between align-items-center p-3 mb-1">
-                  <span>${adr.adresse}</span>
-                  <button class="btn btn-sm btn-remove-adresse" data-index="${i}">
-                    <i class="fa-solid fa-circle-xmark"></i>
-                  </button>
-                </li>
-              `;
-              });
-              html += '</ul>';
-              $('#liste-adresses').html(html);
-            }
-
-            // MàJ localStorage
-            localStorage.setItem('soeasyAdresses', JSON.stringify(remainingAddresses));
-
-            // MàJ config localStorage
-            const config = JSON.parse(localStorage.getItem('soeasyConfig') || '{}');
-            delete config[index];
-
-            // Ré-indexer les clés
-            const newConfig = {};
-            Object.keys(config).sort((a, b) => parseInt(a) - parseInt(b)).forEach((key, newIndex) => {
-              newConfig[newIndex] = config[key];
-            });
-
-            localStorage.setItem('soeasyConfig', JSON.stringify(newConfig));
-            updateSidebarProduitsRecap();
-            updateSidebarTotauxRecap();
-
-            console.log('✅ Adresse supprimée, localStorage mis à jour');
-          } else {
-            alert("Erreur lors de la suppression : " + response.data);
-          }
+        success: function () {
+          // Mise à jour du localStorage aussi
+          const adresses = JSON.parse(localStorage.getItem('soeasyAdresses')) || [];
+          adresses.splice(index, 1);
+          localStorage.setItem('soeasyAdresses', JSON.stringify(adresses));
+          location.reload();
         },
         error: function () {
           alert("Une erreur technique est survenue.");
         }
       });
     });
-
-    // ✅ CORRECTIF CRITIQUE : Bouton "Étape suivante" avec vérification session
-    $(document).off('click', '.step-1 .btn-suivant').on('click', '.step-1 .btn-suivant', function (e) {
-      e.preventDefault();
-
-      const $btn = $(this);
-      const nextStep = $btn.data('step');
-
-      // Désactiver le bouton pendant le traitement
-      $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span>Vérification...');
-
-      // ÉTAPE 1 : Récupérer les adresses du localStorage
-      const adresses = JSON.parse(localStorage.getItem('soeasyAdresses') || '[]');
-
-      if (adresses.length === 0) {
-        alert('Veuillez ajouter au moins une adresse avant de continuer.');
-        $btn.prop('disabled', false).html('Étape suivante <i class="fa-solid fa-arrow-right"></i>');
-        return;
-      }
-
-      // ÉTAPE 2 : Synchroniser explicitement vers la session PHP
-      $.ajax({
-        url: soeasyVars.ajaxurl,
-        type: 'POST',
-        data: {
-          action: 'soeasy_ajax_sync_adresses_to_session',
-          adresses: JSON.stringify(adresses),
-          nonce: soeasyVars.nonce_config
-        },
-        success: function (syncResponse) {
-          console.log('✅ Adresses synchronisées en session:', syncResponse);
-
-          // ÉTAPE 3 : Vérifier que les adresses sont VRAIMENT en session
-          $.ajax({
-            url: soeasyVars.ajaxurl,
-            type: 'POST',
-            data: {
-              action: 'soeasy_verify_adresses_in_session',
-              nonce: soeasyVars.nonce_address
-            },
-            success: function (verifyResponse) {
-              if (verifyResponse.success && verifyResponse.data.has_addresses) {
-                console.log('✅ Vérification OK:', verifyResponse.data.count, 'adresse(s) en session');
-
-                // ÉTAPE 4 : Maintenant on peut charger l'étape suivante en toute sécurité
-                loadStep(nextStep);
-              } else {
-                console.error('❌ Échec vérification session:', verifyResponse);
-                alert('Erreur : Les adresses n\'ont pas pu être synchronisées. Veuillez réessayer.');
-                $btn.prop('disabled', false).html('Étape suivante <i class="fa-solid fa-arrow-right"></i>');
-              }
-            },
-            error: function (xhr, status, error) {
-              console.error('❌ Erreur vérification session:', error);
-              alert('Erreur technique lors de la vérification. Veuillez réessayer.');
-              $btn.prop('disabled', false).html('Étape suivante <i class="fa-solid fa-arrow-right"></i>');
-            }
-          });
-        },
-        error: function (xhr, status, error) {
-          console.error('❌ Erreur synchronisation:', error);
-          alert('Erreur technique lors de la synchronisation. Veuillez réessayer.');
-          $btn.prop('disabled', false).html('Étape suivante <i class="fa-solid fa-arrow-right"></i>');
-        }
-      });
-    });
-
-    console.log('✅ Step 1 Events initialisés (avec vérification session)');
   };
+
 
 
   // Étape 2 – Internet
   window.initStep2Events = function () {
-
     // Reset des anciens événements
     $(document).off('input change', '.step-2 .forfait-internet-checkbox');
     $(document).off('input change', '.step-2 .equipement-checkbox');

@@ -412,12 +412,39 @@ function soeasy_get_adresses_json_for_js() {
 }
 
 /**
+ * Vérifier que les adresses sont bien présentes en session PHP
+ * CRITIQUE : Résout le bug d'accès étape 2 en mode connecté
+ */
+function ajax_soeasy_verify_adresses_in_session() {
+    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+    
+    $adresses = soeasy_get_adresses_configurateur();
+    $count = count($adresses);
+    
+    if ($count > 0) {
+        wp_send_json_success([
+            'has_addresses' => true,
+            'count' => $count,
+            'addresses' => $adresses
+        ]);
+    } else {
+        wp_send_json_error([
+            'has_addresses' => false,
+            'count' => 0,
+            'message' => 'Aucune adresse trouvée en session'
+        ]);
+    }
+}
+
+/**
  * Enregistrement des hooks AJAX
  */
 add_action('wp_ajax_soeasy_add_adresse_configurateur', 'ajax_soeasy_add_adresse_configurateur');
 add_action('wp_ajax_nopriv_soeasy_add_adresse_configurateur', 'ajax_soeasy_add_adresse_configurateur');
 add_action('wp_ajax_soeasy_remove_adresse_configurateur', 'ajax_soeasy_remove_adresse_configurateur');
 add_action('wp_ajax_nopriv_soeasy_remove_adresse_configurateur', 'ajax_soeasy_remove_adresse_configurateur');
+add_action('wp_ajax_soeasy_verify_adresses_in_session', 'ajax_soeasy_verify_adresses_in_session');
+add_action('wp_ajax_nopriv_soeasy_verify_adresses_in_session', 'ajax_soeasy_verify_adresses_in_session');
 
 
 // ============================================================================
