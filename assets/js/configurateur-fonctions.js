@@ -141,62 +141,77 @@ function updateAllPrixTotaux() {
 
 
 function saveToLocalConfig(adresseId, section, nouveauxProduits, options = {}) {
-  const key = 'soeasyConfig';
-  const config = JSON.parse(localStorage.getItem(key)) || {};
+  try {
+    const key = 'soeasyConfig';
+    const config = JSON.parse(localStorage.getItem(key)) || {};
 
-  if (!config[adresseId]) config[adresseId] = {};
-  if (!Array.isArray(config[adresseId][section])) config[adresseId][section] = [];
+    if (!config[adresseId]) config[adresseId] = {};
+    if (!Array.isArray(config[adresseId][section])) config[adresseId][section] = [];
 
-  let existants = config[adresseId][section];
-  let fusionnes = [];
+    let existants = config[adresseId][section];
+    let fusionnes = [];
 
-  if (options.replace === true && options.type) {
-    console.log(`🔄 Replace mode avec type: ${options.type}`);
-    fusionnes = existants.filter(p => p.type !== options.type);
-  } else {
-    fusionnes = [...existants];
-  }
+    if (options.replace === true && options.type) {
+      console.log(`🔄 Replace mode avec type: ${options.type}`);
+      fusionnes = existants.filter(p => p.type !== options.type);
+    } else {
+      fusionnes = [...existants];
+    }
 
-  const indexés = {};
-  fusionnes.forEach(p => {
-    const key = p.id || p.nom;
-    indexés[key] = p;
-  });
-
-  if (Array.isArray(nouveauxProduits)) {
-    nouveauxProduits.forEach(p => {
+    const indexés = {};
+    fusionnes.forEach(p => {
       const key = p.id || p.nom;
       indexés[key] = p;
     });
-  }
 
-  config[adresseId][section] = Object.values(indexés);
-  localStorage.setItem(key, JSON.stringify(config));
+    if (Array.isArray(nouveauxProduits)) {
+      nouveauxProduits.forEach(p => {
+        const key = p.id || p.nom;
+        indexés[key] = p;
+      });
+    }
 
-  // Envoi AJAX
-  jQuery.post(soeasyVars.ajaxurl, {
-    action: 'soeasy_set_config_part',
-    index: adresseId,
-    key: section,
-    items: config[adresseId][section],
-    nonce: soeasyVars.nonce_config
-  });
+    config[adresseId][section] = Object.values(indexés);
+    localStorage.setItem(key, JSON.stringify(config));
 
-  if (section === 'fraisInstallation') {
+    // Envoi AJAX
     jQuery.post(soeasyVars.ajaxurl, {
-      action: 'soeasy_set_frais_installation',
+      action: 'soeasy_set_config_part',
       index: adresseId,
+      key: section,
       items: config[adresseId][section],
       nonce: soeasyVars.nonce_config
     });
-  }
 
-  // 🆕 NOTIFICATION SIDEBAR (si besoin)
-  if (options.notifyChange !== false) {
-    notifySidebarProductAdded();
-  }
+    if (section === 'fraisInstallation') {
+      jQuery.post(soeasyVars.ajaxurl, {
+        action: 'soeasy_set_frais_installation',
+        index: adresseId,
+        items: config[adresseId][section],
+        nonce: soeasyVars.nonce_config
+      });
+    }
 
-  console.log(`✅ saveToLocalConfig terminé pour index ${adresseId}, section ${section}`);
+    // 🆕 NOTIFICATION SIDEBAR (si besoin)
+    if (options.notifyChange !== false) {
+      notifySidebarProductAdded();
+    }
+
+    // ✅ AJOUT 1 : Ajouter user_id si connecté
+    if (typeof soeasyVars !== 'undefined' && soeasyVars.userId) {
+      localStorage.setItem('soeasyUserId', soeasyVars.userId);
+    }
+
+    // ✅ AJOUT 2 : Mettre à jour timestamp de dernière sync
+    if (typeof window.updateConfigSyncTimestamp === 'function') {
+      window.updateConfigSyncTimestamp();
+    }
+
+    console.log(`✅ saveToLocalConfig terminé pour index ${adresseId}, section ${section}`);
+
+  } catch (e) {
+    console.error('Erreur saveToLocalConfig:', e);
+  }
 }
 
 // Notification automatique quand un produit est ajouté
