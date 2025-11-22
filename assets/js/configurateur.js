@@ -1,30 +1,6 @@
 jQuery(document).ready(function ($) {
 
-  console.log('🎯 Initialisation configurateur...');
-  
-  // ✅ RÉCONCILIATION EN PREMIER
-  if (typeof window.reconcileConfiguration === 'function') {
-    console.log('🔄 Appel de la réconciliation...');
-    
-    window.reconcileConfiguration()
-      .then(function() {
-        console.log('✅ Réconciliation terminée, démarrage configurateur');
-        
-        // Charger l'étape mémorisée
-        const currentStep = localStorage.getItem('soeasyCurrentStep') || '1';
-        loadStep(currentStep);
-      })
-      .catch(function(error) {
-        console.error('❌ Erreur réconciliation:', error);
-        // Continuer quand même
-        const currentStep = localStorage.getItem('soeasyCurrentStep') || '1';
-        loadStep(currentStep);
-      });
-  } else {
-    console.warn('⚠️ Module de réconciliation non chargé');
-    const currentStep = localStorage.getItem('soeasyCurrentStep') || '1';
-    loadStep(currentStep);
-  }
+    console.log('🎯 Initialisation configurateur...');
 
   // === Étape suivante ===
   $(document).on('click', '.btn-suivant', function (e) {
@@ -305,12 +281,6 @@ jQuery(document).ready(function ($) {
           updateRecapitulatif();
         }
       }, 200);
-
-      setTimeout(() => {
-        if (typeof window.resetSidebarCompletely === 'function') {
-          window.resetSidebarCompletely();
-        }
-      }, 300);
 
       updateRecapitulatif();
     });

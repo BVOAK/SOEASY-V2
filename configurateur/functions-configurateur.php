@@ -1493,53 +1493,6 @@ add_action('wp_ajax_soeasy_ajax_check_session_config', 'soeasy_ajax_check_sessio
 add_action('wp_ajax_nopriv_soeasy_ajax_check_session_config', 'soeasy_ajax_check_session_config');
 
 /**
- * AJAX : Charger la dernière configuration de l'utilisateur
- * 
- * Utilisé pour restauration automatique après déconnexion.
- * 
- * POST params:
- * - nonce : soeasy_config_action
- * 
- * Response:
- * - success: { config: {...}, config_id: 123, config_name: '...' } ou { config: null }
- */
-function soeasy_ajax_load_last_configuration() {
-    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
-    
-    $user_id = get_current_user_id();
-    
-    if (!$user_id) {
-        wp_send_json_error(['message' => 'Utilisateur non connecté']);
-    }
-    
-    // Récupérer la dernière config
-    $config = soeasy_get_last_user_configuration($user_id);
-    
-    if (!$config) {
-        wp_send_json_success([
-            'config' => null,
-            'message' => 'Aucune configuration trouvée'
-        ]);
-    }
-    
-    // Décoder le JSON
-    $config_decoded = json_decode($config->config_data, true);
-    
-    if (json_last_error() !== JSON_ERROR_NONE) {
-        wp_send_json_error(['message' => 'Erreur de décodage JSON']);
-    }
-    
-    wp_send_json_success([
-        'config' => $config_decoded,
-        'config_id' => $config->id,
-        'config_name' => $config->config_name,
-        'status' => $config->status,
-        'updated_at' => $config->updated_at
-    ]);
-}
-add_action('wp_ajax_soeasy_ajax_load_last_configuration', 'soeasy_ajax_load_last_configuration');
-
-/**
  * AJAX : Mettre à jour le statut d'une configuration (admin)
  * 
  * POST params:
