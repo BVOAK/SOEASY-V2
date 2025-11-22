@@ -224,6 +224,7 @@ jQuery(document).ready(function ($) {
 
   // Fonction de chargement des étapes
   function loadStep(step) {
+    
     localStorage.setItem('soeasyCurrentStep', step);
 
     // Afficher le loader immédiatement
@@ -304,6 +305,12 @@ jQuery(document).ready(function ($) {
           updateRecapitulatif();
         }
       }, 200);
+
+      setTimeout(() => {
+        if (typeof window.resetSidebarCompletely === 'function') {
+          window.resetSidebarCompletely();
+        }
+      }, 300);
 
       updateRecapitulatif();
     });

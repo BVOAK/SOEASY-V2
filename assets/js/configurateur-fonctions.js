@@ -1652,4 +1652,59 @@ jQuery(document).ready(function ($) {
   window.generateStep6Content = generateStep6Content;
   window.updateRecapTotals = updateRecapTotals;
 
+
+  /**
+ * Fonction de réinitialisation COMPLÈTE de la sidebar
+ * À appeler après réconciliation ou vidage config
+ */
+  function resetSidebarCompletely() {
+    console.log('🔄 Réinitialisation complète de la sidebar');
+
+    const $container = $('#config-recapitulatif');
+    const $totaux = $('#config-sidebar-total');
+
+    // Vider complètement le DOM
+    $container.empty();
+    $totaux.empty();
+
+    // Lire le localStorage
+    const config = JSON.parse(localStorage.getItem('soeasyConfig') || '{}');
+    const adresses = JSON.parse(localStorage.getItem('soeasyAdresses') || '[]');
+
+    console.log('📊 État localStorage:', {
+      nbAdresses: adresses.length,
+      nbConfig: Object.keys(config).length
+    });
+
+    // Si vide, afficher message
+    if (adresses.length === 0 && Object.keys(config).length === 0) {
+      $container.html('<p class="text-muted text-center py-3">Aucune configuration</p>');
+      $totaux.html('<p class="text-muted small">0 €</p>');
+
+      // Mettre à jour le compteur
+      if (window.sidebarManager && typeof window.sidebarManager.updateCartCount === 'function') {
+        window.sidebarManager.updateCartCount();
+      }
+
+      console.log('ℹ️ Sidebar vidée (aucune config)');
+      return;
+    }
+
+    // Sinon, reconstruire depuis localStorage
+    updateSidebarProduitsRecap();
+    updateSidebarTotauxRecap();
+
+    // Mettre à jour le compteur
+    setTimeout(() => {
+      if (window.sidebarManager && typeof window.sidebarManager.updateCartCount === 'function') {
+        window.sidebarManager.updateCartCount();
+      }
+    }, 100);
+
+    console.log('✅ Sidebar reconstruite depuis localStorage');
+  }
+
+  // Exposer globalement
+  window.resetSidebarCompletely = resetSidebarCompletely;
+  
 });
