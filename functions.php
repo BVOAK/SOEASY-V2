@@ -457,7 +457,16 @@ function soeasy_enqueue_configurateur_assets_conditionnel() {
             get_template_directory_uri() . '/assets/css/configurateur.css',
         );
 
-        // Scripts JS configurateur
+        // ✅ 1. RÉCONCILIATION EN PREMIER (AVANT TOUT)
+        wp_enqueue_script(
+            'soeasy-reconciliation',
+            get_template_directory_uri() . '/assets/js/config-reconciliation.js',
+            array('jquery'),
+            filemtime(get_template_directory() . '/assets/js/config-reconciliation.js'),
+            true
+        );
+
+        // ✅ 2. FONCTIONS CONFIGURATEUR
         wp_enqueue_script(
             'soeasy-configurateur-fonctions',
             get_template_directory_uri() . '/assets/js/configurateur-fonctions.js',
@@ -466,7 +475,7 @@ function soeasy_enqueue_configurateur_assets_conditionnel() {
             true
         );
 
-		// Scripts JS configurateur
+        // ✅ 3. SIDEBAR MANAGER
         wp_enqueue_script(
             'soeasy-sidebar-manager',
             get_template_directory_uri() . '/assets/js/sidebar-manager.js',
@@ -475,18 +484,11 @@ function soeasy_enqueue_configurateur_assets_conditionnel() {
             true
         );
 
-		wp_enqueue_script(
-            'soeasy-reconciliation',
-            get_template_directory_uri() . '/assets/js/config-reconciliation.js',
-            array('jquery'),
-            '1.0.0',
-            true
-        );
-
+        // ✅ 4. CONFIGURATEUR (dépend de reconciliation)
         wp_enqueue_script(
             'soeasy-configurateur',
             get_template_directory_uri() . '/assets/js/configurateur.js',
-            array('jquery', 'soeasy-configurateur-fonctions'),
+            array('jquery', 'soeasy-reconciliation', 'soeasy-configurateur-fonctions'),
             filemtime(get_template_directory() . '/assets/js/configurateur.js'),
             true
         );
@@ -506,13 +508,13 @@ function soeasy_enqueue_configurateur_assets_conditionnel() {
             'nonce_config' => wp_create_nonce('soeasy_config_action'),
             'nonce_cart' => wp_create_nonce('soeasy_cart_action'),
             'nonce_address' => wp_create_nonce('soeasy_address_action'),
-			'userId' => get_current_user_id(),
-    		'userDisplayName' => is_user_logged_in() ? wp_get_current_user()->display_name : ''
+            'userId' => get_current_user_id(),
+            'userDisplayName' => is_user_logged_in() ? wp_get_current_user()->display_name : ''
         ));
 
         add_action('init', function () {
             if (class_exists('WooCommerce') && is_checkout() === false) {
-                WC()->session; // Initialise la session WC
+                WC()->session;
             }
         }); 
     }
