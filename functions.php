@@ -498,14 +498,16 @@ function soeasy_enqueue_configurateur_assets_conditionnel() {
             'security' => wp_create_nonce('soeasy_nonce'),
             'nonce_config' => wp_create_nonce('soeasy_config_action'),
             'nonce_cart' => wp_create_nonce('soeasy_cart_action'),
-            'nonce_address' => wp_create_nonce('soeasy_address_action')
+            'nonce_address' => wp_create_nonce('soeasy_address_action'),
+			'userId' => get_current_user_id(),
+    		'userDisplayName' => is_user_logged_in() ? wp_get_current_user()->display_name : ''
         ));
 
         add_action('init', function () {
             if (class_exists('WooCommerce') && is_checkout() === false) {
                 WC()->session; // Initialise la session WC
             }
-        });
+        }); 
     }
 }
 add_action('wp_enqueue_scripts', 'soeasy_enqueue_configurateur_assets_conditionnel');
