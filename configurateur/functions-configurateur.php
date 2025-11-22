@@ -38,6 +38,45 @@ function soeasy_session_delete($key)
         WC()->session->__unset($key);
 }
 
+
+/**
+ * FONCTION DE TEST : Forcer une adresse fictive en session
+ * À SUPPRIMER après les tests
+ */
+function soeasy_force_test_address_in_session() {
+    error_log('🧪 FORCING TEST ADDRESS IN SESSION');
+    
+    $test_address = [
+        [
+            'adresse' => 'TEST ADDRESS - 123 Rue de Test, Paris, France',
+            'services' => [],
+            'ville_courte' => 'TEST Paris',
+            'ville_longue' => 'TEST Paris France'
+        ]
+    ];
+    
+    WC()->session->set('soeasy_config_adresses', $test_address);
+    
+    if (method_exists(WC()->session, 'save_data')) {
+        WC()->session->save_data();
+    }
+    
+    error_log('🧪 Test address forced, verifying...');
+    $check = WC()->session->get('soeasy_config_adresses', []);
+    error_log('🧪 Verification: ' . count($check) . ' address(es) in session');
+}
+
+// Hook au chargement de n'importe quelle page du configurateur
+add_action('template_redirect', function() {
+    // Seulement sur la page du configurateur
+    if (is_page() && get_post_field('post_name') == 'configurateur') {
+        if (function_exists('WC') && WC()->session && is_user_logged_in()) {
+            soeasy_force_test_address_in_session();
+        }
+    }
+});
+
+
 /**
  * Fonctions générales
  */
@@ -50,6 +89,13 @@ function soeasy_get_adresses_configurateur() {
     $adresses = soeasy_session_get('soeasy_config_adresses', []);
     error_log('Adresses lues depuis session: ' . print_r($adresses, true));
     error_log('Nombre d\'adresses: ' . count($adresses));
+    
+    // ✅ SI TEST ADDRESS présente, la retourner telle quelle
+    if (count($adresses) > 0 && isset($adresses[0]['adresse']) && strpos($adresses[0]['adresse'], 'TEST ADDRESS') !== false) {
+        error_log('🧪 TEST ADDRESS détectée, retour direct sans enrichissement');
+        error_log('=== FIN GET ADRESSES (TEST MODE) ===');
+        return $adresses;
+    }
     
     $enriched = [];
     foreach ($adresses as $adresse) {
