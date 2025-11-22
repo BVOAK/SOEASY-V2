@@ -143,11 +143,6 @@ function updateAllPrixTotaux() {
 function saveToLocalConfig(adresseId, section, nouveauxProduits, options = {}) {
   try {
 
-    // ✅ TOUJOURS stocker le userId dès le début
-    if (typeof soeasyVars !== 'undefined') {
-      localStorage.setItem('soeasyUserId', soeasyVars.userId || 0);
-    }
-
     const key = 'soeasyConfig';
     const config = JSON.parse(localStorage.getItem(key)) || {};
 

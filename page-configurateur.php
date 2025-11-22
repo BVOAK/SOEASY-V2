@@ -19,19 +19,8 @@ get_header();
 </div>
 
 <script>
-  (function() {
-    const soeasyAdresses = <?php echo json_encode(soeasy_get_adresses_configurateur()); ?>;
-    
-    // ✅ NE PAS écraser si localStorage contient déjà des adresses
-    const localAdresses = localStorage.getItem('soeasyAdresses');
-    
-    if (!localAdresses && soeasyAdresses && soeasyAdresses.length > 0) {
-      console.log('📋 Injection adresses PHP (localStorage vide)');
-      localStorage.setItem('soeasyAdresses', JSON.stringify(soeasyAdresses));
-    } else if (localAdresses) {
-      console.log('⏭️ localStorage contient déjà des adresses, skip injection PHP');
-    }
-  })();
+	const soeasyAdresses = <?php echo json_encode(soeasy_get_adresses_configurateur()); ?>;
+	localStorage.setItem('soeasyAdresses', JSON.stringify(soeasyAdresses));
 </script>
 
 <?php get_footer(); ?>

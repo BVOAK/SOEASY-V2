@@ -1,7 +1,5 @@
 jQuery(document).ready(function ($) {
 
-    console.log('🎯 Initialisation configurateur...');
-
   // === Étape suivante ===
   $(document).on('click', '.btn-suivant', function (e) {
     e.preventDefault();
@@ -195,12 +193,11 @@ jQuery(document).ready(function ($) {
   }
 
   // Rechargement automatique de l'étape mémorisée
-/*   const currentStep = localStorage.getItem('soeasyCurrentStep') || '1';
-  loadStep(currentStep); */
+  const currentStep = localStorage.getItem('soeasyCurrentStep') || '1';
+  loadStep(currentStep);
 
   // Fonction de chargement des étapes
   function loadStep(step) {
-    
     localStorage.setItem('soeasyCurrentStep', step);
 
     // Afficher le loader immédiatement

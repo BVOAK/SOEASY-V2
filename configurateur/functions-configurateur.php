@@ -44,7 +44,6 @@ function soeasy_session_delete($key)
 function soeasy_get_adresses_configurateur() {
     $adresses = soeasy_session_get('soeasy_config_adresses', []);
     
-    // ✅ NOUVEAU : Auto-enrichissement si pas déjà fait
     $enriched = [];
     foreach ($adresses as $adresse) {
         if (is_array($adresse) && isset($adresse['ville_courte'])) {

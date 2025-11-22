@@ -483,11 +483,11 @@ function soeasy_enqueue_configurateur_assets_conditionnel() {
             true
         );
 
-        // ✅ 4. CONFIGURATEUR (dépend de reconciliation)
+        // ✅ 4. CONFIGURATEUR
         wp_enqueue_script(
             'soeasy-configurateur',
             get_template_directory_uri() . '/assets/js/configurateur.js',
-            array('jquery', 'soeasy-reconciliation', 'soeasy-configurateur-fonctions'),
+            array('jquery', 'soeasy-configurateur-fonctions'),
             filemtime(get_template_directory() . '/assets/js/configurateur.js'),
             true
         );
