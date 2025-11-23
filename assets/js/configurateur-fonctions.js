@@ -141,7 +141,6 @@ function updateAllPrixTotaux() {
 
 
 function saveToLocalConfig(adresseId, section, nouveauxProduits, options = {}) {
-  try {
 
     const key = 'soeasyConfig';
     const config = JSON.parse(localStorage.getItem(key)) || {};
@@ -198,22 +197,10 @@ function saveToLocalConfig(adresseId, section, nouveauxProduits, options = {}) {
       notifySidebarProductAdded();
     }
 
-    // ✅ AJOUT 1 : Ajouter user_id si connecté
-    if (typeof soeasyVars !== 'undefined' && soeasyVars.userId) {
-      localStorage.setItem('soeasyUserId', soeasyVars.userId);
-    }
-
-    // ✅ AJOUT 2 : Mettre à jour timestamp de dernière sync
-    if (typeof window.updateConfigSyncTimestamp === 'function') {
-      window.updateConfigSyncTimestamp();
-    }
-
     console.log(`✅ saveToLocalConfig terminé pour index ${adresseId}, section ${section}`);
 
-  } catch (e) {
-    console.error('Erreur saveToLocalConfig:', e);
   }
-}
+
 
 // Notification automatique quand un produit est ajouté
 function notifySidebarProductAdded() {

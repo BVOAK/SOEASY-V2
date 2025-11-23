@@ -465,6 +465,15 @@ function soeasy_enqueue_configurateur_assets_conditionnel() {
 			true
 		);
 
+		// Config Reconciliation - NOUVEAU (à placer APRÈS auth-reset.js, AVANT configurateur-fonctions.js)
+		wp_enqueue_script(
+			'soeasy-config-reconciliation',
+			get_template_directory_uri() . '/assets/js/config-reconciliation.js',
+			array('jquery'),
+			filemtime(get_template_directory() . '/assets/js/config-reconciliation.js'),
+			true
+		);
+
         // ✅ 2. FONCTIONS CONFIGURATEUR
         wp_enqueue_script(
             'soeasy-configurateur-fonctions',
@@ -487,7 +496,7 @@ function soeasy_enqueue_configurateur_assets_conditionnel() {
         wp_enqueue_script(
             'soeasy-configurateur',
             get_template_directory_uri() . '/assets/js/configurateur.js',
-            array('jquery', 'soeasy-configurateur-fonctions'),
+            array('jquery', 'soeasy-auth-reset', 'soeasy-config-reconciliation', 'soeasy-configurateur-fonctions'),
             filemtime(get_template_directory() . '/assets/js/configurateur.js'),
             true
         );
@@ -507,8 +516,8 @@ function soeasy_enqueue_configurateur_assets_conditionnel() {
             'nonce_config' => wp_create_nonce('soeasy_config_action'),
             'nonce_cart' => wp_create_nonce('soeasy_cart_action'),
             'nonce_address' => wp_create_nonce('soeasy_address_action'),
-            'userId' => get_current_user_id(),
-            'userDisplayName' => is_user_logged_in() ? wp_get_current_user()->display_name : ''
+			'userId' => get_current_user_id(),
+			'userDisplayName' => is_user_logged_in() ? wp_get_current_user()->display_name : ''
         ));
 
         add_action('init', function () {
@@ -524,7 +533,7 @@ add_action('wp_enqueue_scripts', 'soeasy_enqueue_configurateur_assets_conditionn
 /**
  * Action AJAX pour mettre à jour la session de configuration
  */
-function soeasy_update_config_session() {
+/* function soeasy_update_config_session() {
     // Vérifier le nonce
     if (!wp_verify_nonce($_POST['nonce'], 'soeasy_config_nonce')) {
         wp_die('Nonce invalide');
@@ -549,7 +558,7 @@ function soeasy_update_config_session() {
     }
 }
 add_action('wp_ajax_soeasy_update_config_session', 'soeasy_update_config_session');
-add_action('wp_ajax_nopriv_soeasy_update_config_session', 'soeasy_update_config_session');
+add_action('wp_ajax_nopriv_soeasy_update_config_session', 'soeasy_update_config_session'); */
 
 function soeasy_force_cart_template($template) {
     
@@ -586,7 +595,7 @@ add_filter('template_include', 'soeasy_force_cart_template', 99);
 /**
  * Hook exécuté APRÈS connexion réussie
  */
-function soeasy_on_user_login($user_login, $user) {
+/* function soeasy_on_user_login($user_login, $user) {
     // Cookie pour déclencher vidage localStorage côté JS
     setcookie('soeasy_force_clear', '1', time() + 10, '/');
     
@@ -602,11 +611,11 @@ function soeasy_on_user_login($user_login, $user) {
     error_log("✅ SoEasy: Utilisateur #{$user->ID} ({$user_login}) connecté - session vidée");
 }
 add_action('wp_login', 'soeasy_on_user_login', 10, 2);
-
+ */
 /**
  * Hook exécuté AVANT déconnexion
  */
-function soeasy_on_user_logout() {
+/* function soeasy_on_user_logout() {
     // Cookie pour déclencher vidage localStorage côté JS
     setcookie('soeasy_force_clear', '1', time() + 10, '/');
     
@@ -622,4 +631,56 @@ function soeasy_on_user_logout() {
     $user_id = get_current_user_id();
     error_log("✅ SoEasy: Utilisateur #{$user_id} déconnecté - session vidée");
 }
-add_action('wp_logout', 'soeasy_on_user_logout');
+add_action('wp_logout', 'soeasy_on_user_logout'); */
+
+
+/**
+ * Shortcode : Bouton connexion/déconnexion avec modal
+ * Usage : [soeasy_auth_button]
+ */
+function soeasy_auth_button_shortcode($atts) {
+    $atts = shortcode_atts(array(
+        'class' => 'btn btn-primary',
+        'text_login' => 'Se connecter',
+        'text_logout' => 'Se déconnecter'
+    ), $atts);
+    
+    $user_id = get_current_user_id();
+    
+    if ($user_id) {
+        // Utilisateur connecté
+        $user = wp_get_current_user();
+        $logout_url = wp_logout_url(home_url('/configurateur/'));
+        
+        return sprintf(
+            '<button type="button" class="%s" id="btn-logout-modal">
+                <i class="fas fa-user-circle me-2"></i>%s
+            </button>
+            <script>
+            jQuery(document).ready(function($) {
+                $("#btn-logout-modal").on("click", function() {
+                    if (confirm("Voulez-vous vraiment vous déconnecter ?")) {
+                        window.location.href = "%s";
+                    }
+                });
+            });
+            </script>',
+            esc_attr($atts['class']),
+            esc_html($atts['text_logout']),
+            esc_url($logout_url)
+        );
+    } else {
+        // Utilisateur non connecté
+        $login_url = wp_login_url(home_url('/configurateur/'));
+        
+        return sprintf(
+            '<a href="%s" class="%s">
+                <i class="fas fa-sign-in-alt me-2"></i>%s
+            </a>',
+            esc_url($login_url),
+            esc_attr($atts['class']),
+            esc_html($atts['text_login'])
+        );
+    }
+}
+add_shortcode('soeasy_auth_button', 'soeasy_auth_button_shortcode');

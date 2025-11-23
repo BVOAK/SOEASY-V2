@@ -38,64 +38,11 @@ function soeasy_session_delete($key)
         WC()->session->__unset($key);
 }
 
-
-/**
- * FONCTION DE TEST : Forcer une adresse fictive en session
- * À SUPPRIMER après les tests
- */
-function soeasy_force_test_address_in_session() {
-    error_log('🧪 FORCING TEST ADDRESS IN SESSION');
-    
-    $test_address = [
-        [
-            'adresse' => 'TEST ADDRESS - 123 Rue de Test, Paris, France',
-            'services' => [],
-            'ville_courte' => 'TEST Paris',
-            'ville_longue' => 'TEST Paris France'
-        ]
-    ];
-    
-    WC()->session->set('soeasy_config_adresses', $test_address);
-    
-    if (method_exists(WC()->session, 'save_data')) {
-        WC()->session->save_data();
-    }
-    
-    error_log('🧪 Test address forced, verifying...');
-    $check = WC()->session->get('soeasy_config_adresses', []);
-    error_log('🧪 Verification: ' . count($check) . ' address(es) in session');
-}
-
-// Hook au chargement de n'importe quelle page du configurateur
-add_action('template_redirect', function() {
-    // Seulement sur la page du configurateur
-    if (is_page() && get_post_field('post_name') == 'configurateur') {
-        if (function_exists('WC') && WC()->session && is_user_logged_in()) {
-            soeasy_force_test_address_in_session();
-        }
-    }
-});
-
-
 /**
  * Fonctions générales
  */
 function soeasy_get_adresses_configurateur() {
-    error_log('=== GET ADRESSES CONFIGURATEUR ===');
-    
-    // Forcer l'initialisation de la session
-    soeasy_start_session_if_needed();
-    
     $adresses = soeasy_session_get('soeasy_config_adresses', []);
-    error_log('Adresses lues depuis session: ' . print_r($adresses, true));
-    error_log('Nombre d\'adresses: ' . count($adresses));
-    
-    // ✅ SI TEST ADDRESS présente, la retourner telle quelle
-    if (count($adresses) > 0 && isset($adresses[0]['adresse']) && strpos($adresses[0]['adresse'], 'TEST ADDRESS') !== false) {
-        error_log('🧪 TEST ADDRESS détectée, retour direct sans enrichissement');
-        error_log('=== FIN GET ADRESSES (TEST MODE) ===');
-        return $adresses;
-    }
     
     $enriched = [];
     foreach ($adresses as $adresse) {
@@ -113,9 +60,6 @@ function soeasy_get_adresses_configurateur() {
             ];
         }
     }
-    
-    error_log('Adresses enrichies retournées: ' . count($enriched));
-    error_log('=== FIN GET ADRESSES ===');
     
     return $enriched;
 }
@@ -411,24 +355,6 @@ function soeasy_get_ville_courte($adresse_complete) {
  */
 function soeasy_get_ville_longue($adresse_complete) {
     return soeasy_extraire_ville($adresse_complete, 35);
-}
-
-// Tests unitaires (à supprimer en production)
-function soeasy_test_extraction_ville() {
-    $tests = [
-        "12 rue Voltaire, Paris, France" => "Paris",
-        "Avenue des Champs-Élysées, Paris" => "Paris",
-        "Lyon" => "Lyon",
-        "123 Boulevard Saint-Germain, 75006 Paris, France" => "75006 Paris",
-        "Marseille, France" => "Marseille",
-        "Une très très longue adresse qui dépasse la limite" => "Une très très long...",
-        "" => "Adresse"
-    ];
-    
-    foreach ($tests as $input => $expected) {
-        $result = soeasy_extraire_ville($input);
-        echo "Input: '$input' => Result: '$result' (Expected: '$expected')\n";
-    }
 }
 
 /**
@@ -1489,17 +1415,21 @@ add_action('wp_ajax_soeasy_ajax_duplicate_configuration', 'soeasy_ajax_duplicate
 function soeasy_ajax_clear_session() {
     soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
     
-    // Vider la session WooCommerce
-    if (function_exists('WC') && WC()->session) {
-        WC()->session->set('soeasy_configurateur', []);
-        WC()->session->set('soeasy_duree_engagement', 0);
-        WC()->session->set('soeasy_mode_financement', '');
-        
-        // Vider aussi le panier
-        WC()->cart->empty_cart();
+    soeasy_start_session_if_needed();
+    
+    WC()->session->set('soeasy_configurateur', []);
+    WC()->session->set('soeasy_config_adresses', []);
+    WC()->session->set('soeasy_duree_engagement', 0);
+    WC()->session->set('soeasy_mode_financement', '');
+    
+    // Sauvegarder la session
+    if (method_exists(WC()->session, 'save_data')) {
+        WC()->session->save_data();
     }
     
-    wp_send_json_success(['message' => 'Session vidée avec succès']);
+    error_log('🧹 Session vidée via AJAX');
+    
+    wp_send_json_success(['message' => 'Session vidée']);
 }
 add_action('wp_ajax_soeasy_ajax_clear_session', 'soeasy_ajax_clear_session');
 add_action('wp_ajax_nopriv_soeasy_ajax_clear_session', 'soeasy_ajax_clear_session');
@@ -1519,31 +1449,35 @@ add_action('wp_ajax_nopriv_soeasy_ajax_clear_session', 'soeasy_ajax_clear_sessio
 function soeasy_ajax_sync_config_to_session() {
     soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
     
-    $config = $_POST['config'] ?? [];
+    soeasy_start_session_if_needed();
     
-    // Si config est un string JSON, le décoder
-    if (is_string($config)) {
-        $config = json_decode($config, true);
-    }
+    $config = isset($_POST['config']) ? $_POST['config'] : [];
     
-    if (!function_exists('WC') || !WC()->session) {
-        wp_send_json_error(['message' => 'Session WooCommerce non disponible']);
-    }
+    // ✅ Parser le JSON des adresses si c'est une string
+    $adresses_raw = isset($_POST['adresses']) ? $_POST['adresses'] : '[]';
+    $adresses = is_string($adresses_raw) ? json_decode($adresses_raw, true) : $adresses_raw;
+    
+    $duree = isset($_POST['duree_engagement']) ? intval($_POST['duree_engagement']) : 0;
+    $mode = isset($_POST['mode_financement']) ? sanitize_text_field($_POST['mode_financement']) : 'comptant';
     
     // Sauvegarder en session
-    if (isset($config['config'])) {
-        WC()->session->set('soeasy_configurateur', $config['config']);
+    WC()->session->set('soeasy_configurateur', $config);
+    WC()->session->set('soeasy_config_adresses', $adresses);
+    WC()->session->set('soeasy_duree_engagement', $duree);
+    WC()->session->set('soeasy_mode_financement', $mode);
+    
+    // Sauvegarder la session
+    if (method_exists(WC()->session, 'save_data')) {
+        WC()->session->save_data();
     }
     
-    if (isset($config['dureeEngagement'])) {
-        WC()->session->set('soeasy_duree_engagement', intval($config['dureeEngagement']));
-    }
+    error_log('✅ Config synchronisée : ' . count($adresses) . ' adresses, ' . count($config) . ' configs');
     
-    if (isset($config['modeFinancement'])) {
-        WC()->session->set('soeasy_mode_financement', $config['modeFinancement']);
-    }
-    
-    wp_send_json_success(['message' => 'Configuration synchronisée en session']);
+    wp_send_json_success([
+        'message' => 'Config synchronisée',
+        'adresses_count' => count($adresses),
+        'config_count' => count($config)
+    ]);
 }
 add_action('wp_ajax_soeasy_ajax_sync_config_to_session', 'soeasy_ajax_sync_config_to_session');
 add_action('wp_ajax_nopriv_soeasy_ajax_sync_config_to_session', 'soeasy_ajax_sync_config_to_session');
@@ -1562,14 +1496,15 @@ add_action('wp_ajax_nopriv_soeasy_ajax_sync_config_to_session', 'soeasy_ajax_syn
 function soeasy_ajax_check_session_config() {
     soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
     
-    $hasConfig = false;
+    soeasy_start_session_if_needed();
     
-    if (function_exists('WC') && WC()->session) {
-        $session_config = WC()->session->get('soeasy_configurateur', []);
-        $hasConfig = !empty($session_config);
-    }
+    $session_config = WC()->session->get('soeasy_configurateur', []);
+    $has_session = !empty($session_config);
     
-    wp_send_json_success(['hasConfig' => $hasConfig]);
+    wp_send_json_success([
+        'has_session' => $has_session,
+        'config_count' => count($session_config)
+    ]);
 }
 add_action('wp_ajax_soeasy_ajax_check_session_config', 'soeasy_ajax_check_session_config');
 add_action('wp_ajax_nopriv_soeasy_ajax_check_session_config', 'soeasy_ajax_check_session_config');
@@ -1774,6 +1709,61 @@ function soeasy_ajax_sync_adresses_to_session() {
 }
 add_action('wp_ajax_soeasy_ajax_sync_adresses_to_session', 'soeasy_ajax_sync_adresses_to_session');
 add_action('wp_ajax_nopriv_soeasy_ajax_sync_adresses_to_session', 'soeasy_ajax_sync_adresses_to_session');
+
+/**
+ * AJAX : Charger la dernière configuration d'un utilisateur
+ * 
+ * POST params:
+ * - user_id : ID utilisateur
+ * - nonce : soeasy_config_action
+ * 
+ * Response:
+ * - success: { configuration: {...} }
+ * - error: { message: '...' }
+ */
+function soeasy_ajax_load_last_configuration() {
+    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+    
+    $user_id = isset($_POST['user_id']) ? intval($_POST['user_id']) : get_current_user_id();
+    
+    if (!$user_id) {
+        wp_send_json_error(['message' => 'Utilisateur non connecté']);
+    }
+    
+    global $wpdb;
+    $table = $wpdb->prefix . 'soeasy_configurations';
+    
+    // Chercher la dernière config active OU draft de l'utilisateur
+    $config = $wpdb->get_row($wpdb->prepare(
+        "SELECT * FROM $table 
+         WHERE user_id = %d 
+         AND status IN ('active', 'draft')
+         ORDER BY updated_at DESC 
+         LIMIT 1",
+        $user_id
+    ));
+    
+    if (!$config) {
+        wp_send_json_success([
+            'configuration' => null,
+            'message' => 'Aucune configuration trouvée'
+        ]);
+    }
+    
+    // Retourner la config
+    wp_send_json_success([
+        'configuration' => [
+            'id' => $config->id,
+            'config_name' => $config->config_name,
+            'config_data' => $config->config_data,
+            'status' => $config->status,
+            'created_at' => $config->created_at,
+            'updated_at' => $config->updated_at
+        ]
+    ]);
+}
+add_action('wp_ajax_soeasy_ajax_load_last_configuration', 'soeasy_ajax_load_last_configuration');
+
 
 /**
  * ============================================================================

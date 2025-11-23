@@ -1,32 +1,40 @@
 /**
- * =====================================================
- * MODULE DE RÉCONCILIATION LOCALSTORAGE ↔ SESSION PHP
- * =====================================================
- * VERSION 1.3 - Correction timing rechargement après conflit
+ * ============================================================================
+ * MODULE DE RÉCONCILIATION - localStorage ↔ Session PHP
+ * ============================================================================
  * 
- * @version 1.3.0
- * @date 2025-01-22
+ * Gère intelligemment la synchronisation entre localStorage (frontend) et 
+ * session PHP (backend) en fonction de l'état de connexion de l'utilisateur.
  * 
- * CORRECTIF : Attendre explicitement la fin des sync AJAX avant reload
+ * Scénarios gérés :
+ * 1. Guest (utilisateur non connecté)
+ * 2. Guest → Login (connexion avec config en cours)
+ * 3. User connecté (utilisateur déjà connecté)
+ * 4. User → Logout (déconnexion)
+ * 5. User A → User B (changement d'utilisateur)
+ * 
+ * @version 2.0
+ * @date 2025-11-23
  */
 
 (function ($) {
     'use strict';
 
-    const RECONCILIATION_FLAG = 'soeasy_reconciliation_done';
-    const RECONCILIATION_TIMESTAMP = 'soeasy_last_reconciliation';
-    const RECONCILIATION_TIMEOUT = 5 * 60 * 1000; // 5 minutes
-
     /**
      * ========================================
-     * UTILITAIRES LOCALSTORAGE
+     * FONCTIONS UTILITAIRES
      * ========================================
      */
 
+    /**
+     * Récupère toute la configuration depuis localStorage
+     * 
+     * @returns {Object|null} Config complète ou null si erreur
+     */
     function getLocalStorageConfig() {
         try {
             const config = {
-                userId: parseInt(localStorage.getItem('soeasyUserId')) || 0,
+                userId: parseInt(localStorage.getItem('soeasyUserId') || '0'),
                 configId: localStorage.getItem('soeasyConfigId') || null,
                 lastSync: localStorage.getItem('soeasyLastSync') || null,
                 adresses: JSON.parse(localStorage.getItem('soeasyAdresses') || '[]'),
@@ -35,294 +43,211 @@
                 modeFinancement: localStorage.getItem('selectedFinancementMode') || 'comptant'
             };
 
-            console.log('📱 Lecture localStorage :', {
-                userId: config.userId,
-                hasConfig: Object.keys(config.config).length > 0,
-                nbAdresses: config.adresses.length,
-                duree: config.dureeEngagement,
-                mode: config.modeFinancement
-            });
-
             return config;
-        } catch (e) {
-            console.error('❌ Erreur lecture localStorage:', e);
+        } catch (error) {
+            console.error('❌ Erreur lecture localStorage:', error);
             return null;
         }
     }
 
+    /**
+     * Vide complètement la configuration localStorage
+     */
     function clearLocalStorageConfig() {
-        const keys = [
-            'soeasyUserId',
-            'soeasyConfigId',
-            'soeasyLastSync',
-            'soeasyConfig',
-            'soeasyAdresses',
-            'selectedDureeEngagement',
-            'selectedFinancementMode'
-        ];
-
-        keys.forEach(key => localStorage.removeItem(key));
-        console.log('🧹 localStorage vidé');
-
-        if (typeof window.resetSidebarCompletely === 'function') {
-            window.resetSidebarCompletely();
-        }
-
-        $(document).trigger('soeasy:localStorage:cleared');
-    }
-
-    function restoreConfigurationToLocalStorage(configData, userId = null) {
         try {
-            const finalUserId = userId || configData.userId || 0;
+            localStorage.removeItem('soeasyUserId');
+            localStorage.removeItem('soeasyConfigId');
+            localStorage.removeItem('soeasyLastSync');
+            localStorage.removeItem('soeasyAdresses');
+            localStorage.removeItem('soeasyConfig');
+            localStorage.removeItem('selectedDureeEngagement');
+            localStorage.removeItem('selectedFinancementMode');
+            localStorage.removeItem('soeasyCurrentStep');
 
-            // Restaurer toutes les clés localStorage
-            localStorage.setItem('soeasyUserId', finalUserId.toString());
-
-            if (configData.configId) {
-                localStorage.setItem('soeasyConfigId', configData.configId.toString());
-            }
-
-            if (configData.adresses && Array.isArray(configData.adresses)) {
-                localStorage.setItem('soeasyAdresses', JSON.stringify(configData.adresses));
-            }
-
-            if (configData.config && typeof configData.config === 'object') {
-                localStorage.setItem('soeasyConfig', JSON.stringify(configData.config));
-            }
-
-            if (configData.dureeEngagement) {
-                localStorage.setItem('selectedDureeEngagement', configData.dureeEngagement.toString());
-            }
-
-            if (configData.modeFinancement) {
-                localStorage.setItem('selectedFinancementMode', configData.modeFinancement);
-            }
-
-            localStorage.setItem('soeasyLastSync', new Date().toISOString());
-            console.log('✅ Configuration restaurée dans localStorage');
-
-            $(document).trigger('soeasy:localStorage:restored', [configData]);
-
-            // ✅ CRITIQUE : RETOURNER LA PROMISE de synchronisation des adresses
-            return $.post(soeasyVars.ajaxurl, {
-                action: 'soeasy_ajax_sync_adresses_to_session',
-                adresses: JSON.stringify(configData.adresses || []),
-                nonce: soeasyVars.nonce_config
-            }).done(function (response) {
-                console.log('✅ Adresses restaurées en session PHP:', response.data?.count || 0);
-            }).fail(function (xhr, status, error) {
-                console.error('❌ Échec sync adresses:', error);
-            });
-
-        } catch (e) {
-            console.error('❌ Erreur restauration localStorage:', e);
-            return $.Deferred().reject(e).promise();
+            console.log('🧹 localStorage vidé');
+        } catch (error) {
+            console.error('❌ Erreur vidage localStorage:', error);
         }
-    }
-
-    function ensureUserIdInLocalStorage() {
-        if (typeof soeasyVars !== 'undefined' && soeasyVars.userId) {
-            localStorage.setItem('soeasyUserId', soeasyVars.userId.toString());
-            console.log('🔐 userId ajouté au localStorage:', soeasyVars.userId);
-        }
-    }
-
-    function updateLastSyncTimestamp() {
-        localStorage.setItem('soeasyLastSync', new Date().toISOString());
     }
 
     /**
-     * ========================================
-     * COMMUNICATION AJAX
-     * ========================================
+     * Vide la session PHP via AJAX
+     * 
+     * @returns {Promise}
      */
-
     function clearSessionConfig() {
-        return $.post(soeasyVars.ajaxurl, {
-            action: 'soeasy_ajax_clear_session',
-            nonce: soeasyVars.nonce_config
-        })
-            .done(function (response) {
-                console.log('🧹 Session PHP vidée', response);
-                $(document).trigger('soeasy:session:cleared');
-            })
-            .fail(function (xhr, status, error) {
-                console.warn('⚠️ Échec vidage session:', error);
-            });
-    }
-
-    function syncLocalStorageToSession(localConfig) {
-        console.log('🔄 Synchronisation vers session PHP...');
-
-        // ✅ ÉTAPE 1 : Synchroniser les adresses EN PREMIER
-        const adressesPromise = $.post(soeasyVars.ajaxurl, {
-            action: 'soeasy_ajax_sync_adresses_to_session',
-            adresses: JSON.stringify(localConfig.adresses || []),
-            nonce: soeasyVars.nonce_config
-        })
-            .done(function (response) {
-                if (response.success) {
-                    console.log('✅ Adresses synchronisées:', response.data?.count || 0, 'adresses');
-                }
-            })
-            .fail(function (xhr, status, error) {
-                console.warn('⚠️ Échec sync adresses:', error);
-            });
-
-        // ✅ ÉTAPE 2 : Synchroniser la config complète
-        const configPromise = $.post(soeasyVars.ajaxurl, {
-            action: 'soeasy_ajax_sync_config_to_session',
-            config: JSON.stringify(localConfig),
-            nonce: soeasyVars.nonce_config
-        })
-            .done(function (response) {
-                if (response.success) {
-                    console.log('✅ Configuration synchronisée en session PHP');
-                    updateLastSyncTimestamp();
-                    $(document).trigger('soeasy:session:synced', [localConfig]);
-                } else {
-                    console.warn('⚠️ Échec sync config:', response.data?.message);
-                }
-            })
-            .fail(function (xhr, status, error) {
-                console.warn('⚠️ Erreur AJAX sync config:', error);
-            });
-
-        // ✅ Retourner $.when qui attend LES DEUX promises
-        return $.when(adressesPromise, configPromise).then(function () {
-            console.log('✅ Synchronisation complète terminée');
-        });
-    }
-
-    // Dans loadLastConfigurationFromDB()
-    function loadLastConfigurationFromDB(userId) {
-        return $.post(soeasyVars.ajaxurl, {
-            action: 'soeasy_ajax_load_last_configuration',
-            nonce: soeasyVars.nonce_config
-        })
-            .then(function (response) {
-                if (response.success && response.data.config) {
-                    console.log('💾 Configuration chargée depuis la DB:', response.data.config_name);
-
-                    return restoreConfigurationToLocalStorage(response.data.config, userId)
-                        .then(function () {
-                            console.log('✅ Restauration localStorage terminée');
-                            return syncLocalStorageToSession(response.data.config);
-                        })
-                        .then(function () {
-                            console.log('✅ Synchronisation session terminée');
-
-                            // ✅ NOUVEAU : Reset sidebar avant rechargement
-                            if (typeof window.resetSidebarCompletely === 'function') {
-                                window.resetSidebarCompletely();
-                            }
-
-                            return new Promise(function (resolve) {
-                                setTimeout(function () {
-                                    console.log('🔄 Rechargement page...');
-                                    resolve();
-                                }, 500);
-                            });
-                        })
-                        .then(function () {
-                            if (!hasRecentReconciliation()) {
-                                markReconciliationDone();
-                                location.reload();
-                            }
-                            return response.data.config;
-                        });
-                } else {
-                    console.log('ℹ️ Aucune configuration trouvée en DB');
-
-                    // ✅ NOUVEAU : Reset sidebar même si pas de config
-                    if (typeof window.resetSidebarCompletely === 'function') {
-                        window.resetSidebarCompletely();
-                    }
-
-                    return null;
-                }
-            })
-            .fail(function (xhr, status, error) {
-                console.error('❌ Erreur chargement config DB:', error);
-                return null;
-            });
-    }
-
-    function checkSessionHasConfig() {
-        return $.post(soeasyVars.ajaxurl, {
-            action: 'soeasy_ajax_check_session_config',
-            nonce: soeasyVars.nonce_config
-        })
-            .then(function (response) {
-                if (response.success) {
-                    return response.data.hasConfig === true;
-                }
-                return false;
-            })
-            .fail(function () {
-                return false;
-            });
-    }
-
-    function checkSessionAndRestore() {
-        return checkSessionHasConfig().then(function (hasSessionConfig) {
-            if (hasSessionConfig) {
-                console.warn('⚠️ Incohérence détectée : session pleine, localStorage vide');
-
-                return clearSessionConfig().then(function () {
-                    const userId = parseInt(soeasyVars.userId) || 0;
-                    if (userId > 0) {
-                        console.log('🔄 Chargement dernière config utilisateur...');
-                        return loadLastConfigurationFromDB(userId);
-                    } else {
-                        console.log('ℹ️ Utilisateur non connecté, session vidée');
-                        return null;
-                    }
-                });
-            } else {
-                console.log('✅ Session vide OK');
-                return null;
+        return $.ajax({
+            url: soeasyVars.ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'soeasy_ajax_clear_session',
+                nonce: soeasyVars.nonce_config
             }
+        }).done(function () {
+            console.log('🧹 Session PHP vidée');
+        }).fail(function () {
+            console.warn('⚠️ Échec vidage session (non bloquant)');
         });
     }
 
     /**
-     * ========================================
-     * GESTION RECONCILIATION
-     * ========================================
+     * Synchronise localStorage vers session PHP
+     * 
+     * @param {Object} localConfig - Configuration depuis localStorage
+     * @returns {Promise}
      */
+    function syncLocalStorageToSession(localConfig) {
+        if (!localConfig || Object.keys(localConfig.config).length === 0) {
+            console.log('ℹ️ Aucune config à synchroniser');
+            return Promise.resolve();
+        }
 
-    function hasRecentReconciliation() {
-        const lastReconciliation = sessionStorage.getItem(RECONCILIATION_TIMESTAMP);
-        if (!lastReconciliation) {
+        // ✅ IMPORTANT : Envoyer les adresses complètes, pas juste le tableau
+        return $.ajax({
+            url: soeasyVars.ajaxurl,
+            type: 'POST',
+            data: {
+            action: 'soeasy_ajax_sync_config_to_session',
+            config: localConfig.config,
+            adresses: JSON.stringify(localConfig.adresses), // ← Stringifier ici
+            duree_engagement: localConfig.dureeEngagement,
+            mode_financement: localConfig.modeFinancement,
+            nonce: soeasyVars.nonce_config
+            }
+        }).done(function(response) {
+            if (response.success) {
+            console.log('✅ Config synchronisée en session');
+            }
+        }).fail(function() {
+            console.warn('⚠️ Échec sync session (non bloquant)');
+        });
+    }
+
+    /**
+     * Restaure une configuration complète dans localStorage
+     * 
+     * @param {Object} configData - Données de config à restaurer
+     * @returns {boolean} True si succès
+     */
+    function restoreConfigurationToLocalStorage(configData) {
+        try {
+            if (!configData) {
+                console.warn('⚠️ Aucune donnée à restaurer');
+                return false;
+            }
+
+            // Parser le JSON si c'est une string
+            const data = typeof configData.config_data === 'string'
+                ? JSON.parse(configData.config_data)
+                : configData.config_data;
+
+            // Stocker toutes les données
+            localStorage.setItem('soeasyUserId', data.userId || '0');
+            localStorage.setItem('soeasyConfigId', configData.id || '');
+            localStorage.setItem('soeasyAdresses', JSON.stringify(data.adresses || []));
+            localStorage.setItem('soeasyConfig', JSON.stringify(data.config || {}));
+            localStorage.setItem('selectedDureeEngagement', data.dureeEngagement || '0');
+            localStorage.setItem('selectedFinancementMode', data.modeFinancement || 'comptant');
+            localStorage.setItem('soeasyLastSync', new Date().toISOString());
+
+            console.log('✅ Configuration restaurée dans localStorage');
+            return true;
+        } catch (error) {
+            console.error('❌ Erreur restauration config:', error);
             return false;
         }
+    }
 
-        const elapsed = Date.now() - parseInt(lastReconciliation);
-        const isRecent = elapsed < RECONCILIATION_TIMEOUT;
+    /**
+     * Charge la dernière configuration d'un utilisateur depuis la BDD
+     * 
+     * @param {number} userId - ID utilisateur
+     * @returns {Promise}
+     */
+    function loadLastConfigurationFromDB(userId) {
+        return $.ajax({
+            url: soeasyVars.ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'soeasy_ajax_load_last_configuration',
+                user_id: userId,
+                nonce: soeasyVars.nonce_config
+            }
+        }).done(function (response) {
+            if (response.success && response.data && response.data.configuration) {
+                console.log('📥 Configuration chargée depuis BDD');
 
-        if (!isRecent) {
-            console.log('⏰ Réconciliation expirée');
-            sessionStorage.removeItem(RECONCILIATION_FLAG);
-            sessionStorage.removeItem(RECONCILIATION_TIMESTAMP);
+                restoreConfigurationToLocalStorage(response.data.configuration);
+
+                if (typeof showToastInfo === 'function') {
+                    showToastInfo('Votre dernière configuration a été restaurée.');
+                }
+
+                // Recharger la page pour appliquer la config
+                setTimeout(() => {
+                    location.reload();
+                }, 500);
+            } else {
+                console.log('ℹ️ Aucune configuration sauvegardée trouvée');
+            }
+        }).fail(function () {
+            console.warn('⚠️ Erreur chargement config BDD');
+        });
+    }
+
+    /**
+     * Vérifie la session PHP et restaure si nécessaire
+     * 
+     * @returns {Promise}
+     */
+    function checkSessionAndRestore() {
+        const currentUserId = parseInt(soeasyVars.userId) || 0;
+
+        if (currentUserId === 0) {
+            return Promise.resolve();
         }
 
-        return isRecent;
+        return $.ajax({
+            url: soeasyVars.ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'soeasy_ajax_check_session_config',
+                nonce: soeasyVars.nonce_config
+            }
+        }).done(function (response) {
+            const localConfig = getLocalStorageConfig();
+
+            if (response.data && response.data.has_session &&
+                (!localConfig || Object.keys(localConfig.config).length === 0)) {
+                // Session pleine mais localStorage vide → Conflit
+                console.warn('⚠️ Conflit détecté : session pleine, localStorage vide');
+
+                clearSessionConfig().then(() => {
+                    if (typeof showToastWarning === 'function') {
+                        showToastWarning('Configuration réinitialisée pour éviter les conflits.');
+                    }
+
+                    if (typeof loadStep === 'function') {
+                        loadStep(1);
+                    }
+                });
+            } else if (!localConfig || Object.keys(localConfig.config).length === 0) {
+                // Pas de config locale, charger depuis BDD
+                loadLastConfigurationFromDB(currentUserId);
+            }
+        });
     }
 
-    function markReconciliationDone() {
-        sessionStorage.setItem(RECONCILIATION_FLAG, 'true');
-        sessionStorage.setItem(RECONCILIATION_TIMESTAMP, Date.now().toString());
-        console.log('✅ Réconciliation marquée comme effectuée');
-    }
+    /**
+     * S'assure que le userId est bien dans localStorage
+     */
+    function ensureUserIdInLocalStorage() {
+        const currentUserId = parseInt(soeasyVars.userId) || 0;
+        const storedUserId = parseInt(localStorage.getItem('soeasyUserId') || '0');
 
-    function reloadPageIfNeeded() {
-        if (!hasRecentReconciliation()) {
-            console.log('🔄 Rechargement requis...');
-            markReconciliationDone();
-            location.reload();
-        } else {
-            console.log('ℹ️ Rechargement ignoré (réconciliation récente)');
+        if (currentUserId !== storedUserId) {
+            localStorage.setItem('soeasyUserId', currentUserId);
+            console.log('✅ userId mis à jour : ' + currentUserId);
         }
     }
 
@@ -332,123 +257,223 @@
      * ========================================
      */
 
-    window.reconcileConfiguration = function (force = false) {
-        console.log('🔄 === DÉBUT RÉCONCILIATION ===');
-
-        // Skip si déjà réconcilié récemment (sauf si force)
-        if (!force && hasRecentReconciliation()) {
-            console.log('ℹ️ Réconciliation récente détectée, skip');
-            return Promise.resolve();
-        }
+    /**
+     * Réconcilie localStorage et session selon l'état de connexion
+     * 
+     * Gère 5 scénarios :
+     * - CAS 1 : Guest (currentUserId = 0)
+     * - CAS 2 : Guest → Login (localConfig.userId = 0, currentUserId > 0)
+     * - CAS 3 : User connecté (localConfig.userId = currentUserId)
+     * - CAS 4 : User → Logout (localConfig.userId > 0, currentUserId = 0)
+     * - CAS 5 : User A → User B (localConfig.userId ≠ currentUserId, tous deux > 0)
+     * 
+     * @returns {Promise}
+     */
+    window.reconcileConfiguration = function () {
+        console.log('🔄 Démarrage réconciliation...');
 
         const currentUserId = parseInt(soeasyVars.userId) || 0;
-        console.log('👤 Utilisateur actuel: ID', currentUserId);
-
         const localConfig = getLocalStorageConfig();
 
         if (!localConfig) {
-            console.warn('❌ Impossible de lire localStorage');
-            return checkSessionAndRestore();
+            console.error('❌ Impossible de lire localStorage');
+            return Promise.reject('localStorage inaccessible');
         }
 
-        // CAS 1 : CONFLIT UTILISATEUR
-        if (typeof localConfig.userId !== 'undefined' && localConfig.userId !== currentUserId) {
-            console.warn('⚠️ CONFLIT DÉTECTÉ !');
-            console.warn('→ localStorage userId=' + localConfig.userId);
-            console.warn('→ Utilisateur actuel =', currentUserId);
+        // ========================================
+        // CAS 1 : GUEST (utilisateur non connecté)
+        // ========================================
+        if (currentUserId === 0) {
+            console.log('👤 Mode GUEST détecté');
 
-            clearLocalStorageConfig(); // ✅ Appelle déjà resetSidebarCompletely()
+            // Nouveau visiteur ou localStorage vide
+            if (!localConfig.config || Object.keys(localConfig.config).length === 0) {
+                console.log('ℹ️ Nouveau visiteur, pas de config');
+                return Promise.resolve();
+            }
 
-            return clearSessionConfig().then(function() {
-                console.log('💾 Chargement dernière configuration...');
-                return loadLastConfigurationFromDB(currentUserId);
-            }).then(function() {
-                console.log('✅ Conflit résolu');
-            });
+            // Guest avec config existante → Synchroniser
+            console.log('✅ Config guest existante, synchronisation session');
+            return syncLocalStorageToSession(localConfig);
         }
 
-        // CAS 2 : UTILISATEUR CONNECTÉ
-        if (currentUserId > 0) {
-            console.log('ℹ️ Utilisateur connecté');
+        // ========================================
+        // CAS 2 : GUEST → LOGIN (connexion détectée)
+        // ========================================
+        if (currentUserId > 0 && localConfig.userId === 0) {
+            console.log('🔄 Connexion détectée : guest → user ' + currentUserId);
 
-            if (localConfig.adresses.length > 0 || Object.keys(localConfig.config).length > 0) {
-                console.log('✅ Configuration locale valide, synchronisation...');
-                return syncLocalStorageToSession(localConfig).then(function () {
-                    markReconciliationDone();
-                    console.log('✅ Réconciliation terminée, démarrage configurateur');
+            localStorage.setItem('soeasyUserId', currentUserId);
+
+            if (localConfig.config && Object.keys(localConfig.config).length > 0) {
+                return syncLocalStorageToSession(localConfig).then(() => {
+                console.log('✅ Config guest convertie en config user ' + currentUserId);
+                
+                if (typeof showToastInfo === 'function') {
+                    showToastInfo('Vous êtes connecté. Votre configuration est préservée.');
+                }
+                
+                // ✅ NOUVEAU : Recharger l'étape actuelle pour afficher la config
+                const currentStep = parseInt(localStorage.getItem('soeasyCurrentStep') || '1');
+                if (typeof loadStep === 'function') {
+                    setTimeout(() => loadStep(currentStep), 500);
+                }
                 });
+            }
+
+            return Promise.resolve();
+        }
+
+        // ========================================
+        // CAS 3 : USER CONNECTÉ (utilisateur déjà connecté)
+        // ========================================
+        if (currentUserId > 0 && localConfig.userId === currentUserId) {
+            console.log('✅ Utilisateur connecté : ' + currentUserId);
+
+            ensureUserIdInLocalStorage();
+
+            // Config valide → Synchroniser
+            if (localConfig.config && Object.keys(localConfig.config).length > 0) {
+                return syncLocalStorageToSession(localConfig);
             } else {
-                console.log('ℹ️ localStorage vide, vérification session...');
-                return checkSessionAndRestore().then(function () {
-                    markReconciliationDone();
-                });
+                // Pas de config locale → Vérifier session et BDD
+                return checkSessionAndRestore();
             }
         }
 
-        // CAS 3 : UTILISATEUR NON CONNECTÉ
-        console.log('ℹ️ Utilisateur non connecté');
-        ensureUserIdInLocalStorage();
+        // ========================================
+        // CAS 4 : USER → LOGOUT (déconnexion détectée)
+        // ========================================
+        if (currentUserId === 0 && localConfig.userId > 0) {
+            console.log('🔄 Déconnexion détectée : user ' + localConfig.userId + ' → guest');
 
-        if (localConfig.adresses.length > 0 || Object.keys(localConfig.config).length > 0) {
-            console.log('✅ Configuration anonyme existante, synchronisation...');
-            return syncLocalStorageToSession(localConfig).then(function () {
-                markReconciliationDone();
-            });
-        } else {
-            console.log('ℹ️ Aucune configuration locale');
-            return checkSessionAndRestore().then(function () {
-                markReconciliationDone();
+            clearLocalStorageConfig();
+            
+            return clearSessionConfig().then(() => {
+                console.log('✅ Déconnexion complète');
+                
+                // ✅ PAS de redirection, juste notification
+                if (typeof showToastInfo === 'function') {
+                showToastInfo('Vous avez été déconnecté.');
+                }
+                
+                // ✅ Recharger étape 1 proprement
+                if (typeof loadStep === 'function') {
+                setTimeout(() => loadStep(1), 500);
+                }
             });
         }
+
+        // ========================================
+        // CAS 5 : USER A → USER B (changement utilisateur)
+        // ========================================
+        if (localConfig.userId > 0 && currentUserId > 0 && localConfig.userId !== currentUserId) {
+            console.log('⚠️ Changement utilisateur détecté : ' + localConfig.userId + ' → ' + currentUserId);
+
+            clearLocalStorageConfig();
+
+            return clearSessionConfig().then(() => {
+                return loadLastConfigurationFromDB(currentUserId);
+            });
+        }
+
+        // Cas non prévu (ne devrait pas arriver)
+        console.warn('⚠️ Scénario non géré');
+        return Promise.resolve();
     };
 
     /**
-     * Fonction de nettoyage complet (pour debugging)
+     * ========================================
+     * FONCTION DE SAUVEGARDE MANUELLE
+     * ========================================
      */
-    window.clearConfigurationAndReload = function () {
-        if (!confirm('Voulez-vous vraiment effacer toute la configuration et recharger ?')) {
-            return;
+
+    /**
+     * Sauvegarde la configuration actuelle en BDD
+     * 
+     * @param {string|null} configName - Nom de la config (optionnel)
+     * @returns {Promise}
+     */
+    window.saveConfigurationToDB = function (configName) {
+        const userId = parseInt(soeasyVars.userId) || 0;
+
+        if (userId === 0) {
+            console.warn('⚠️ Sauvegarde impossible : utilisateur non connecté');
+            if (typeof showToastWarning === 'function') {
+                showToastWarning('Vous devez être connecté pour sauvegarder.');
+            } else {
+                alert('Vous devez être connecté pour sauvegarder.');
+            }
+            return Promise.reject('Not logged in');
         }
 
-        console.log('🗑️ Nettoyage complet demandé');
-        clearLocalStorageConfig();
+        const localConfig = getLocalStorageConfig();
 
-        clearSessionConfig().then(function () {
-            console.log('✅ Configuration effacée, rechargement...');
-            sessionStorage.removeItem(RECONCILIATION_FLAG);
-            sessionStorage.removeItem(RECONCILIATION_TIMESTAMP);
-            location.reload();
+        if (!localConfig || Object.keys(localConfig.config).length === 0) {
+            console.warn('⚠️ Aucune configuration à sauvegarder');
+            if (typeof showToastWarning === 'function') {
+                showToastWarning('Aucune configuration à sauvegarder.');
+            } else {
+                alert('Aucune configuration à sauvegarder.');
+            }
+            return Promise.reject('No config');
+        }
+
+        // Nom par défaut si non fourni
+        const name = configName || ('Configuration ' + new Date().toLocaleDateString('fr-FR'));
+
+        const configData = {
+            userId: userId,
+            adresses: localConfig.adresses,
+            config: localConfig.config,
+            dureeEngagement: localConfig.dureeEngagement,
+            modeFinancement: localConfig.modeFinancement
+        };
+
+        console.log('💾 Sauvegarde config : ' + name);
+
+        return $.ajax({
+            url: soeasyVars.ajaxurl,
+            type: 'POST',
+            data: {
+                action: 'soeasy_ajax_save_configuration',
+                config_id: localConfig.configId || null,
+                config_name: name,
+                config_data: JSON.stringify(configData),
+                status: 'active',
+                nonce: soeasyVars.nonce_config
+            }
+        }).done(function (response) {
+            if (response.success) {
+                localStorage.setItem('soeasyConfigId', response.data.config_id);
+
+                console.log('✅ Config sauvegardée (ID: ' + response.data.config_id + ')');
+
+                if (typeof showToastSuccess === 'function') {
+                    showToastSuccess('Configuration sauvegardée : ' + name);
+                } else {
+                    alert('Configuration sauvegardée avec succès !');
+                }
+            } else {
+                console.error('❌ Erreur sauvegarde:', response.data?.message);
+
+                if (typeof showToastError === 'function') {
+                    showToastError('Erreur : ' + (response.data?.message || 'Erreur inconnue'));
+                } else {
+                    alert('Erreur : ' + (response.data?.message || 'Erreur inconnue'));
+                }
+            }
+        }).fail(function () {
+            console.error('❌ Erreur réseau sauvegarde');
+
+            if (typeof showToastError === 'function') {
+                showToastError('Erreur de communication avec le serveur.');
+            } else {
+                alert('Erreur de communication avec le serveur.');
+            }
         });
     };
 
-    /**
-     * ========================================
-     * HELPERS DEBUGGING
-     * ========================================
-     */
-
-    window.SoEasyReconciliation = {
-        getConfig: getLocalStorageConfig,
-        clearLocal: function () {
-            clearLocalStorageConfig();
-            console.log('💡 Utilisez clearAndReload() pour recharger la page');
-        },
-        clearSession: clearSessionConfig,
-        syncToSession: syncLocalStorageToSession,
-        loadFromDB: loadLastConfigurationFromDB,
-        checkSession: checkSessionHasConfig,
-        reconcile: window.reconcileConfiguration,
-        clearAndReload: window.clearConfigurationAndReload,
-        forceReconcile: function () {
-            sessionStorage.removeItem(RECONCILIATION_FLAG);
-            sessionStorage.removeItem(RECONCILIATION_TIMESTAMP);
-            return window.reconcileConfiguration(true);
-        }
-    };
-
-    window.updateConfigSyncTimestamp = function () {
-        updateLastSyncTimestamp();
-    };
 
     /**
      * ========================================
@@ -457,30 +482,18 @@
      */
 
     $(document).ready(function () {
-
-        if (typeof soeasyVars === 'undefined') {
-            console.log('ℹ️ soeasyVars non défini, pas de réconciliation');
-            return;
-        }
-
-        if ($('.config-step').length === 0 && !$('#configurateur-container').length) {
-            console.log('ℹ️ Pas sur une page configurateur');
-            return;
-        }
-
-        console.log('🎯 Page configurateur détectée, lancement réconciliation...');
-
-        // Petite pause pour laisser WordPress s'initialiser
-        setTimeout(function () {
-            window.reconcileConfiguration()
-                .then(function () {
-                    console.log('✅ === RÉCONCILIATION TERMINÉE ===');
-                })
-                .catch(function (error) {
-                    console.error('❌ === ERREUR RÉCONCILIATION ===');
-                    console.error(error);
-                });
-        }, 100);
+        // Uniquement sur page configurateur
+        setTimeout(() => {
+            if ($('.config-step').length > 0 || $('#configurateur-container').length > 0) {
+                reconcileConfiguration()
+                    .then(() => {
+                        console.log('✅ Réconciliation terminée avec succès');
+                    })
+                    .catch((error) => {
+                        console.error('❌ Erreur lors de la réconciliation:', error);
+                    });
+            }
+        }, 1500);
     });
 
 })(jQuery);
