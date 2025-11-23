@@ -587,54 +587,6 @@ add_filter('template_include', 'soeasy_force_cart_template', 99);
 
 
 /**
- * ============================================================================
- * RESET CONFIGURATION À CONNEXION/DÉCONNEXION
- * ============================================================================
- */
-
-/**
- * Hook exécuté APRÈS connexion réussie
- */
-/* function soeasy_on_user_login($user_login, $user) {
-    // Cookie pour déclencher vidage localStorage côté JS
-    setcookie('soeasy_force_clear', '1', time() + 10, '/');
-    
-    // Vider session PHP immédiatement
-    if (function_exists('WC') && WC()->session) {
-        WC()->session->set('soeasy_configurateur', []);
-        WC()->session->set('soeasy_config_adresses', []);
-        WC()->session->set('soeasy_duree_engagement', 0);
-        WC()->session->set('soeasy_mode_financement', '');
-        WC()->cart->empty_cart();
-    }
-    
-    error_log("✅ SoEasy: Utilisateur #{$user->ID} ({$user_login}) connecté - session vidée");
-}
-add_action('wp_login', 'soeasy_on_user_login', 10, 2);
- */
-/**
- * Hook exécuté AVANT déconnexion
- */
-/* function soeasy_on_user_logout() {
-    // Cookie pour déclencher vidage localStorage côté JS
-    setcookie('soeasy_force_clear', '1', time() + 10, '/');
-    
-    // Vider session PHP
-    if (function_exists('WC') && WC()->session) {
-        WC()->session->set('soeasy_configurateur', []);
-        WC()->session->set('soeasy_config_adresses', []);
-        WC()->session->set('soeasy_duree_engagement', 0);
-        WC()->session->set('soeasy_mode_financement', '');
-        WC()->cart->empty_cart();
-    }
-    
-    $user_id = get_current_user_id();
-    error_log("✅ SoEasy: Utilisateur #{$user_id} déconnecté - session vidée");
-}
-add_action('wp_logout', 'soeasy_on_user_logout'); */
-
-
-/**
  * Shortcode : Bouton connexion/déconnexion avec modal
  * Usage : [soeasy_auth_button]
  */
