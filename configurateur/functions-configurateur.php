@@ -18,17 +18,65 @@ function soeasy_start_session_if_needed()
     }
 }
 
-function soeasy_session_set($key, $value)
-{
+function soeasy_session_set($key, $value) {
     soeasy_start_session_if_needed();
-    if (WC()->session)
-        WC()->session->set($key, $value);
+    
+    if (!WC()->session) {
+        error_log('❌ WC Session non disponible');
+        return false;
+    }
+    
+    error_log('=== DEBUT soeasy_session_set ===');
+    error_log('Key: ' . $key);
+    error_log('Value: ' . print_r($value, true));
+    error_log('User ID: ' . get_current_user_id());
+    error_log('Has session: ' . (WC()->session->has_session() ? 'YES' : 'NO'));
+    
+    // Set
+    WC()->session->set($key, $value);
+    error_log('✅ WC()->session->set() appelé');
+    
+    // Vérifier immédiatement
+    $check_get = WC()->session->get($key, 'NOT_FOUND');
+    error_log('Vérif get(): ' . print_r($check_get, true));
+    
+    // Voir toutes les données de session
+    $all_data = WC()->session->get_session_data();
+    error_log('Toutes les données session: ' . print_r(array_keys($all_data), true));
+    
+    // Save
+    if (method_exists(WC()->session, 'save_data')) {
+        WC()->session->save_data();
+        error_log('✅ save_data() appelé');
+    }
+    
+    // Vérifier en BDD
+    global $wpdb;
+    $db_session = $wpdb->get_var($wpdb->prepare(
+        "SELECT session_value FROM {$wpdb->prefix}woocommerce_sessions WHERE session_key = %s",
+        get_current_user_id()
+    ));
+    error_log('Session en BDD: ' . substr($db_session, 0, 200));
+    
+    error_log('=== FIN soeasy_session_set ===');
+    
+    return true;
 }
 
-function soeasy_session_get($key, $default = null)
-{
+function soeasy_session_get($key, $default = null) {
     soeasy_start_session_if_needed();
-    return WC()->session ? WC()->session->get($key, $default) : $default;
+    
+    if (!WC()->session) {
+        error_log('⚠️ WC Session non disponible pour get: ' . $key);
+        return $default;
+    }
+    
+    $value = WC()->session->get($key, $default);
+    
+    $value_desc = is_array($value) ? count($value) . ' items' : (is_string($value) ? substr($value, 0, 50) : gettype($value));
+    error_log('📥 Session get: ' . $key . ' = ' . $value_desc);
+    
+    return $value;
 }
 
 function soeasy_session_delete($key)
@@ -1447,37 +1495,76 @@ add_action('wp_ajax_nopriv_soeasy_ajax_clear_session', 'soeasy_ajax_clear_sessio
  * - success: { message: '...' }
  */
 function soeasy_ajax_sync_config_to_session() {
-    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+    error_log('=== DÉBUT SYNC CONFIG TO SESSION ===');
     
-    soeasy_start_session_if_needed();
-    
-    $config = isset($_POST['config']) ? $_POST['config'] : [];
-    
-    // ✅ Parser le JSON des adresses si c'est une string
-    $adresses_raw = isset($_POST['adresses']) ? $_POST['adresses'] : '[]';
-    $adresses = is_string($adresses_raw) ? json_decode($adresses_raw, true) : $adresses_raw;
-    
-    $duree = isset($_POST['duree_engagement']) ? intval($_POST['duree_engagement']) : 0;
-    $mode = isset($_POST['mode_financement']) ? sanitize_text_field($_POST['mode_financement']) : 'comptant';
-    
-    // Sauvegarder en session
-    WC()->session->set('soeasy_configurateur', $config);
-    WC()->session->set('soeasy_config_adresses', $adresses);
-    WC()->session->set('soeasy_duree_engagement', $duree);
-    WC()->session->set('soeasy_mode_financement', $mode);
-    
-    // Sauvegarder la session
-    if (method_exists(WC()->session, 'save_data')) {
-        WC()->session->save_data();
+    try {
+        // Vérifier nonce
+        soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+        
+        // Démarrer session
+        soeasy_start_session_if_needed();
+        
+        // ✅ CORRECTION : Retirer les slashes d'échappement
+        $config_raw = isset($_POST['config']) ? stripslashes($_POST['config']) : '{}';
+        error_log('Config raw (après stripslashes): ' . substr($config_raw, 0, 200));
+        
+        $config = json_decode($config_raw, true);
+        
+        if ($config === null) {
+            error_log('❌ Erreur JSON config: ' . json_last_error_msg());
+            wp_send_json_error(['message' => 'JSON config invalide: ' . json_last_error_msg()]);
+            return;
+        }
+        
+        $config = is_array($config) ? $config : [];
+        error_log('✅ Config parsée: ' . count($config) . ' éléments');
+        
+        // ✅ CORRECTION : Retirer les slashes d'échappement pour adresses aussi
+        $adresses_raw = isset($_POST['adresses']) ? stripslashes($_POST['adresses']) : '[]';
+        error_log('Adresses raw (après stripslashes): ' . substr($adresses_raw, 0, 200));
+        
+        $adresses = json_decode($adresses_raw, true);
+        
+        if ($adresses === null) {
+            error_log('❌ Erreur JSON adresses: ' . json_last_error_msg());
+            wp_send_json_error(['message' => 'JSON adresses invalide: ' . json_last_error_msg()]);
+            return;
+        }
+        
+        $adresses = is_array($adresses) ? $adresses : [];
+        error_log('✅ Adresses parsées: ' . count($adresses) . ' éléments');
+        
+        // Récupérer autres params
+        $duree = isset($_POST['duree_engagement']) ? intval($_POST['duree_engagement']) : 0;
+        $mode = isset($_POST['mode_financement']) ? sanitize_text_field($_POST['mode_financement']) : 'comptant';
+        
+        error_log('Params: duree=' . $duree . ', mode=' . $mode);
+        
+        // Sauvegarder en session
+        WC()->session->set('soeasy_configurateur', $config);
+        WC()->session->set('soeasy_config_adresses', $adresses);
+        WC()->session->set('soeasy_duree_engagement', $duree);
+        WC()->session->set('soeasy_mode_financement', $mode);
+        
+        // Sauvegarder la session
+        if (method_exists(WC()->session, 'save_data')) {
+            WC()->session->save_data();
+        }
+        
+        error_log('✅ Config synchronisée: ' . count($adresses) . ' adresses, ' . count($config) . ' configs');
+        error_log('=== FIN SYNC CONFIG TO SESSION - SUCCESS ===');
+        
+        wp_send_json_success([
+            'message' => 'Config synchronisée',
+            'adresses_count' => count($adresses),
+            'config_count' => count($config)
+        ]);
+        
+    } catch (Exception $e) {
+        error_log('❌ EXCEPTION: ' . $e->getMessage());
+        error_log('Stack trace: ' . $e->getTraceAsString());
+        wp_send_json_error(['message' => 'Erreur serveur: ' . $e->getMessage()]);
     }
-    
-    error_log('✅ Config synchronisée : ' . count($adresses) . ' adresses, ' . count($config) . ' configs');
-    
-    wp_send_json_success([
-        'message' => 'Config synchronisée',
-        'adresses_count' => count($adresses),
-        'config_count' => count($config)
-    ]);
 }
 add_action('wp_ajax_soeasy_ajax_sync_config_to_session', 'soeasy_ajax_sync_config_to_session');
 add_action('wp_ajax_nopriv_soeasy_ajax_sync_config_to_session', 'soeasy_ajax_sync_config_to_session');
@@ -1770,6 +1857,29 @@ add_action('wp_ajax_soeasy_ajax_load_last_configuration', 'soeasy_ajax_load_last
  * FIN DES ENDPOINTS AJAX CONFIGURATIONS
  * ============================================================================
  */
+
+/**
+ * TEMPORAIRE - Debug : Afficher le contenu de la session
+ */
+function soeasy_ajax_debug_session() {
+    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+    
+    soeasy_start_session_if_needed();
+    
+    $session_data = [
+        'configurateur' => WC()->session->get('soeasy_configurateur', 'VIDE'),
+        'adresses' => WC()->session->get('soeasy_config_adresses', 'VIDE'),
+        'duree' => WC()->session->get('soeasy_duree_engagement', 'VIDE'),
+        'mode' => WC()->session->get('soeasy_mode_financement', 'VIDE'),
+        'has_session' => WC()->session->has_session(),
+        'customer_id' => WC()->session->get_customer_id()
+    ];
+    
+    error_log('🔍 DEBUG SESSION: ' . print_r($session_data, true));
+    
+    wp_send_json_success($session_data);
+}
+add_action('wp_ajax_soeasy_ajax_debug_session', 'soeasy_ajax_debug_session');
 
 
 ?>

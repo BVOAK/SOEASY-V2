@@ -529,37 +529,6 @@ function soeasy_enqueue_configurateur_assets_conditionnel() {
 }
 add_action('wp_enqueue_scripts', 'soeasy_enqueue_configurateur_assets_conditionnel');
 
-
-/**
- * Action AJAX pour mettre à jour la session de configuration
- */
-/* function soeasy_update_config_session() {
-    // Vérifier le nonce
-    if (!wp_verify_nonce($_POST['nonce'], 'soeasy_config_nonce')) {
-        wp_die('Nonce invalide');
-    }
-    
-    // Récupérer et valider la config
-    $config = isset($_POST['config']) ? $_POST['config'] : array();
-    
-    if (is_array($config)) {
-        // Sauvegarder en session
-        if (!session_id()) {
-            session_start();
-        }
-        $_SESSION['soeasy_configurateur'] = $config;
-        
-        wp_send_json_success(array(
-            'message' => 'Configuration mise à jour en session',
-            'config_count' => count($config)
-        ));
-    } else {
-        wp_send_json_error('Configuration invalide');
-    }
-}
-add_action('wp_ajax_soeasy_update_config_session', 'soeasy_update_config_session');
-add_action('wp_ajax_nopriv_soeasy_update_config_session', 'soeasy_update_config_session'); */
-
 function soeasy_force_cart_template($template) {
     
     if (is_cart()) {

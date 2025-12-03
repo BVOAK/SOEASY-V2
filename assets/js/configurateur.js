@@ -279,6 +279,8 @@ jQuery(document).ready(function ($) {
         }
       }, 200);
 
+      //reconcileConfiguration();
+
       updateRecapitulatif();
     });
   }
