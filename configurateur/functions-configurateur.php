@@ -22,43 +22,18 @@ function soeasy_session_set($key, $value) {
     soeasy_start_session_if_needed();
     
     if (!WC()->session) {
-        error_log('❌ WC Session non disponible');
+        error_log('❌ WC Session non disponible pour set: ' . $key);
         return false;
     }
     
-    error_log('=== DEBUT soeasy_session_set ===');
-    error_log('Key: ' . $key);
-    error_log('Value: ' . print_r($value, true));
-    error_log('User ID: ' . get_current_user_id());
-    error_log('Has session: ' . (WC()->session->has_session() ? 'YES' : 'NO'));
-    
-    // Set
     WC()->session->set($key, $value);
-    error_log('✅ WC()->session->set() appelé');
     
-    // Vérifier immédiatement
-    $check_get = WC()->session->get($key, 'NOT_FOUND');
-    error_log('Vérif get(): ' . print_r($check_get, true));
-    
-    // Voir toutes les données de session
-    $all_data = WC()->session->get_session_data();
-    error_log('Toutes les données session: ' . print_r(array_keys($all_data), true));
-    
-    // Save
     if (method_exists(WC()->session, 'save_data')) {
         WC()->session->save_data();
-        error_log('✅ save_data() appelé');
     }
     
-    // Vérifier en BDD
-    global $wpdb;
-    $db_session = $wpdb->get_var($wpdb->prepare(
-        "SELECT session_value FROM {$wpdb->prefix}woocommerce_sessions WHERE session_key = %s",
-        get_current_user_id()
-    ));
-    error_log('Session en BDD: ' . substr($db_session, 0, 200));
-    
-    error_log('=== FIN soeasy_session_set ===');
+    $value_desc = is_array($value) ? count($value) . ' items' : (is_string($value) ? substr($value, 0, 50) : gettype($value));
+    error_log('✅ Session set & saved: ' . $key . ' = ' . $value_desc . ' (user: ' . (is_user_logged_in() ? get_current_user_id() : 'guest') . ')');
     
     return true;
 }
@@ -1483,16 +1458,20 @@ add_action('wp_ajax_soeasy_ajax_clear_session', 'soeasy_ajax_clear_session');
 add_action('wp_ajax_nopriv_soeasy_ajax_clear_session', 'soeasy_ajax_clear_session');
 
 /**
- * AJAX : Synchroniser localStorage vers session PHP
+ * AJAX : Synchroniser localStorage vers session PHP (COMPLET)
  * 
- * Envoie toute la config localStorage en session WooCommerce.
+ * Envoie TOUTE la config localStorage en session WooCommerce.
+ * Utilisé par config-reconciliation.js
  * 
  * POST params:
  * - config : Objet configuration complet (JSON string)
+ * - adresses : Array adresses (JSON string)
+ * - duree_engagement : String
+ * - mode_financement : String
  * - nonce : soeasy_config_action
  * 
  * Response:
- * - success: { message: '...' }
+ * - success: { message, adresses_count, config_count }
  */
 function soeasy_ajax_sync_config_to_session() {
     error_log('=== DÉBUT SYNC CONFIG TO SESSION ===');
@@ -1504,65 +1483,155 @@ function soeasy_ajax_sync_config_to_session() {
         // Démarrer session
         soeasy_start_session_if_needed();
         
-        // ✅ CORRECTION : Retirer les slashes d'échappement
+        // Parser les données
         $config_raw = isset($_POST['config']) ? stripslashes($_POST['config']) : '{}';
-        error_log('Config raw (après stripslashes): ' . substr($config_raw, 0, 200));
-        
-        $config = json_decode($config_raw, true);
-        
-        if ($config === null) {
-            error_log('❌ Erreur JSON config: ' . json_last_error_msg());
-            wp_send_json_error(['message' => 'JSON config invalide: ' . json_last_error_msg()]);
-            return;
-        }
-        
-        $config = is_array($config) ? $config : [];
-        error_log('✅ Config parsée: ' . count($config) . ' éléments');
-        
-        // ✅ CORRECTION : Retirer les slashes d'échappement pour adresses aussi
         $adresses_raw = isset($_POST['adresses']) ? stripslashes($_POST['adresses']) : '[]';
+        
+        error_log('Config raw (après stripslashes): ' . substr($config_raw, 0, 200));
         error_log('Adresses raw (après stripslashes): ' . substr($adresses_raw, 0, 200));
         
+        $config = json_decode($config_raw, true);
         $adresses = json_decode($adresses_raw, true);
         
-        if ($adresses === null) {
-            error_log('❌ Erreur JSON adresses: ' . json_last_error_msg());
-            wp_send_json_error(['message' => 'JSON adresses invalide: ' . json_last_error_msg()]);
-            return;
+        if (!is_array($config)) {
+            error_log('❌ Config parsing failed');
+            $config = [];
         }
         
-        $adresses = is_array($adresses) ? $adresses : [];
+        if (!is_array($adresses)) {
+            error_log('❌ Adresses parsing failed');
+            $adresses = [];
+        }
+        
+        error_log('✅ Config parsée: ' . count($config) . ' éléments');
         error_log('✅ Adresses parsées: ' . count($adresses) . ' éléments');
         
-        // Récupérer autres params
-        $duree = isset($_POST['duree_engagement']) ? intval($_POST['duree_engagement']) : 0;
-        $mode = isset($_POST['mode_financement']) ? sanitize_text_field($_POST['mode_financement']) : 'comptant';
-        
-        error_log('Params: duree=' . $duree . ', mode=' . $mode);
-        
-        // Sauvegarder en session
-        WC()->session->set('soeasy_configurateur', $config);
-        WC()->session->set('soeasy_config_adresses', $adresses);
-        WC()->session->set('soeasy_duree_engagement', $duree);
-        WC()->session->set('soeasy_mode_financement', $mode);
-        
-        // Sauvegarder la session
-        if (method_exists(WC()->session, 'save_data')) {
-            WC()->session->save_data();
+        // Enrichir les adresses
+        $enriched_addresses = [];
+        foreach ($adresses as $adr) {
+            $adresse_text = is_array($adr) ? ($adr['adresse'] ?? '') : $adr;
+            if (empty($adresse_text)) continue;
+            
+            $enriched_addresses[] = [
+                'adresse' => $adresse_text,
+                'services' => is_array($adr) ? ($adr['services'] ?? []) : [],
+                'ville_courte' => soeasy_get_ville_courte($adresse_text),
+                'ville_longue' => soeasy_get_ville_longue($adresse_text)
+            ];
         }
         
-        error_log('✅ Config synchronisée: ' . count($adresses) . ' adresses, ' . count($config) . ' configs');
+        // Récupérer les autres paramètres
+        $duree_engagement = sanitize_text_field($_POST['duree_engagement'] ?? '0');
+        $mode_financement = sanitize_text_field($_POST['mode_financement'] ?? 'comptant');
+        
+        error_log('Params: duree=' . $duree_engagement . ', mode=' . $mode_financement);
+        
+        // Sauvegarder en session WC (pour la requête actuelle)
+        WC()->session->set('soeasy_configurateur', $config);
+        WC()->session->set('soeasy_config_adresses', $enriched_addresses);
+        WC()->session->set('soeasy_duree_engagement', $duree_engagement);
+        WC()->session->set('soeasy_mode_financement', $mode_financement);
+        
+        error_log('✅ WC()->session->set() appelé pour toutes les clés');
+        
+        // ✅ CONSTRUIRE MANUELLEMENT les données de session pour la BDD
+        global $wpdb;
+        $session_key = is_user_logged_in() ? get_current_user_id() : WC()->session->get_customer_id();
+        
+        // Récupérer la session existante en BDD
+        $existing_session = $wpdb->get_var($wpdb->prepare(
+            "SELECT session_value FROM {$wpdb->prefix}woocommerce_sessions WHERE session_key = %s",
+            $session_key
+        ));
+        
+        // Parser la session existante
+        $session_data = $existing_session ? maybe_unserialize($existing_session) : [];
+        if (!is_array($session_data)) {
+            $session_data = [];
+        }
+        
+        error_log('Session existante: ' . count($session_data) . ' clés');
+        
+        // ✅ AJOUTER/METTRE À JOUR nos clés
+        $session_data['soeasy_configurateur'] = $config;
+        $session_data['soeasy_config_adresses'] = $enriched_addresses;
+        $session_data['soeasy_duree_engagement'] = $duree_engagement;
+        $session_data['soeasy_mode_financement'] = $mode_financement;
+        
+        error_log('Session après ajout: ' . count($session_data) . ' clés');
+        error_log('Clés: ' . print_r(array_keys($session_data), true));
+        
+        // Écrire en BDD
+        $result = $wpdb->replace(
+            $wpdb->prefix . 'woocommerce_sessions',
+            array(
+                'session_key' => $session_key,
+                'session_value' => maybe_serialize($session_data),
+                'session_expiry' => time() + (60 * 60 * 48) // 48h
+            ),
+            array('%s', '%s', '%d')
+        );
+        
+        error_log('✅ Écriture BDD: ' . $result . ' row(s), ' . strlen(maybe_serialize($session_data)) . ' bytes');
+        
+        // Vider le cache WC
+        wp_cache_delete('wc_session_' . $session_key, 'session');
+        wp_cache_delete($session_key, 'wc_session_id');
+        
+        error_log('✅ Cache WC vidé');
+        
+        // VÉRIFICATION : Relire depuis la BDD
+        $check_db = $wpdb->get_var($wpdb->prepare(
+            "SELECT session_value FROM {$wpdb->prefix}woocommerce_sessions WHERE session_key = %s",
+            $session_key
+        ));
+        
+        if ($check_db) {
+            error_log('✅ Session BDD vérifiée: ' . strlen($check_db) . ' bytes');
+            
+            $db_data = maybe_unserialize($check_db);
+            $has_adresses = isset($db_data['soeasy_config_adresses']);
+            error_log('  Contient soeasy_config_adresses: ' . ($has_adresses ? 'OUI' : 'NON'));
+            
+            if ($has_adresses && is_array($db_data['soeasy_config_adresses'])) {
+                error_log('  Nombre adresses en BDD: ' . count($db_data['soeasy_config_adresses']));
+            }
+        } else {
+            error_log('❌ AUCUNE session en BDD après écriture !');
+        }
+        
+        // VÉRIFICATION : Relire depuis WC session
+        $check_config = WC()->session->get('soeasy_configurateur', []);
+        $check_adresses = WC()->session->get('soeasy_config_adresses', []);
+        
+        error_log('Vérification WC session:');
+        error_log('  Config: ' . (is_array($check_config) ? count($check_config) : 'INVALID') . ' items');
+        error_log('  Adresses: ' . (is_array($check_adresses) ? count($check_adresses) : 'INVALID') . ' items');
+        
+        // SI échec de sauvegarde, retourner erreur
+        if (count($check_adresses) === 0 && count($enriched_addresses) > 0) {
+            error_log('❌ ÉCHEC : Adresses non sauvegardées en session WC !');
+            wp_send_json_error([
+                'message' => 'Les adresses n\'ont pas pu être sauvegardées en session',
+                'debug' => [
+                    'sent' => count($enriched_addresses),
+                    'saved_wc' => count($check_adresses),
+                    'db_found' => !empty($check_db)
+                ]
+            ]);
+        }
+        
+        error_log('✅ Config synchronisée: ' . count($enriched_addresses) . ' adresses, ' . count($config) . ' configs');
         error_log('=== FIN SYNC CONFIG TO SESSION - SUCCESS ===');
         
         wp_send_json_success([
             'message' => 'Config synchronisée',
-            'adresses_count' => count($adresses),
-            'config_count' => count($config)
+            'adresses_count' => count($check_adresses),
+            'config_count' => count($check_config)
         ]);
         
     } catch (Exception $e) {
-        error_log('❌ EXCEPTION: ' . $e->getMessage());
-        error_log('Stack trace: ' . $e->getTraceAsString());
+        error_log('💥 Exception dans sync_config_to_session: ' . $e->getMessage());
         wp_send_json_error(['message' => 'Erreur serveur: ' . $e->getMessage()]);
     }
 }
@@ -1881,5 +1950,60 @@ function soeasy_ajax_debug_session() {
 }
 add_action('wp_ajax_soeasy_ajax_debug_session', 'soeasy_ajax_debug_session');
 
+
+/**
+ * HOOK : Logger TOUTES les lectures de session au chargement
+ */
+add_action('template_redirect', function() {
+    if (is_page_template('page-configurateur.php')) {
+        error_log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        error_log('🔄 CHARGEMENT PAGE CONFIGURATEUR');
+        error_log('User ID: ' . get_current_user_id());
+        error_log('Is logged in: ' . (is_user_logged_in() ? 'YES' : 'NO'));
+        
+        if (function_exists('WC') && WC()->session) {
+            $session_key = is_user_logged_in() ? get_current_user_id() : WC()->session->get_customer_id();
+            error_log('WC Session key: ' . $session_key);
+            
+            // Lire DIRECTEMENT depuis la BDD
+            global $wpdb;
+            $db_session = $wpdb->get_var($wpdb->prepare(
+                "SELECT session_value FROM {$wpdb->prefix}woocommerce_sessions WHERE session_key = %s",
+                $session_key
+            ));
+            
+            if ($db_session) {
+                error_log('✅ Session BDD trouvée: ' . strlen($db_session) . ' bytes');
+                
+                $db_data = maybe_unserialize($db_session);
+                error_log('Clés en BDD: ' . print_r(array_keys($db_data), true));
+                
+                if (isset($db_data['soeasy_config_adresses'])) {
+                    $count = is_array($db_data['soeasy_config_adresses']) ? count($db_data['soeasy_config_adresses']) : 0;
+                    error_log('  soeasy_config_adresses en BDD: ' . $count . ' items');
+                } else {
+                    error_log('  ❌ soeasy_config_adresses ABSENT de la BDD');
+                }
+            } else {
+                error_log('❌ AUCUNE session en BDD');
+            }
+            
+            // Lire depuis WC()->session
+            $wc_adresses = WC()->session->get('soeasy_config_adresses', 'NOT_SET');
+            if ($wc_adresses === 'NOT_SET') {
+                error_log('  ❌ soeasy_config_adresses non chargé par WC');
+            } elseif (is_array($wc_adresses)) {
+                error_log('  ✅ soeasy_config_adresses chargé par WC: ' . count($wc_adresses) . ' items');
+            } else {
+                error_log('  ⚠️ soeasy_config_adresses invalide: ' . gettype($wc_adresses));
+            }
+            
+        } else {
+            error_log('❌ WooCommerce session non disponible');
+        }
+        
+        error_log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    }
+}, 5); // Priorité 5 pour s'exécuter tôt
 
 ?>

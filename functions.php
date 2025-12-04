@@ -605,3 +605,43 @@ function soeasy_auth_button_shortcode($atts) {
     }
 }
 add_shortcode('soeasy_auth_button', 'soeasy_auth_button_shortcode');
+
+/**
+ * TEMPORAIRE - Logger TOUTES les écritures dans wp_woocommerce_sessions
+ */
+add_filter('query', function($query) {
+    if (strpos($query, 'woocommerce_sessions') !== false && 
+        (strpos($query, 'INSERT') !== false || strpos($query, 'REPLACE') !== false || strpos($query, 'UPDATE') !== false)) {
+        
+        $backtrace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 10);
+        $caller_info = [];
+        foreach ($backtrace as $i => $trace) {
+            if ($i === 0) continue;
+            $caller_info[] = sprintf(
+                "#%d %s() in %s:%d",
+                $i,
+                $trace['function'] ?? 'unknown',
+                basename($trace['file'] ?? 'unknown'),
+                $trace['line'] ?? 0
+            );
+        }
+        
+        error_log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        error_log('🔴 ÉCRITURE woocommerce_sessions');
+        error_log('Query: ' . substr($query, 0, 200));
+        error_log('Called by: ' . implode(' > ', array_slice($caller_info, 0, 5)));
+        error_log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    }
+    
+    return $query;
+}, 1);
+
+
+add_action('woocommerce_set_cart_cookies', function($set) {
+    if (is_user_logged_in()) {
+        // Empêcher la migration session guest → user
+        remove_action('woocommerce_load_cart_from_session', array(WC()->session, 'migrate_guest_session_to_user_session'), 5);
+        
+        error_log('✅ Migration session guest→user désactivée (user déjà connecté)');
+    }
+}, 1);
