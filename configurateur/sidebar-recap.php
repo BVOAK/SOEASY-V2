@@ -78,7 +78,6 @@
         <i class="fas fa-spinner fa-spin me-1"></i> Initialisation...
       </div>
 
-
       <?php get_template_part('template-parts/reassurance'); ?>
 
     </div>

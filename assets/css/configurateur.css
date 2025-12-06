@@ -1078,3 +1078,21 @@ body.sidebar-open #config-step-content {
 #auto-save-indicator i {
   margin-right: 0.25rem;
 }
+
+
+/* ========================================
+   SIDEBAR - ÉTAT VIDE
+   ======================================== */
+
+#config-recapitulatif .fa-shopping-cart.opacity-50 {
+  opacity: 0.3 !important;
+  color: #6c757d;
+}
+
+#cart-count {
+  transition: all 0.3s ease;
+}
+
+#cart-count:empty {
+  display: none;
+}

@@ -610,6 +610,14 @@ jQuery(document).ready(function ($) {
         window.updateSaveButton();
       }
 
+      if (typeof window.cleanOrphanConfigIndexes === 'function') {
+        window.cleanOrphanConfigIndexes();
+      }
+
+      if (typeof window.updateCompleteSidebar === 'function') {
+        window.updateCompleteSidebar();
+      }
+
       $.ajax({
         url: soeasyVars.ajaxurl,
         type: 'POST',
@@ -636,7 +644,7 @@ jQuery(document).ready(function ($) {
 
   // Étape 2 – Internet
   window.initStep2Events = function () {
-    
+
     // Reset des anciens événements
     $(document).off('input change', '.step-2 .forfait-internet-checkbox');
     $(document).off('input change', '.step-2 .equipement-checkbox');

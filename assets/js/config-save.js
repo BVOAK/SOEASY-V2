@@ -151,6 +151,9 @@
   /**
    * Ouvrir le modal de sauvegarde
    */
+  /**
+ * Ouvrir le modal de sauvegarde
+ */
   window.showSaveConfigModal = function () {
     const userId = parseInt(soeasyVars.userId) || 0;
 
@@ -168,29 +171,37 @@
       return;
     }
 
-    // Pré-remplir le nom si config déjà sauvegardée
+    // ✅ AMÉLIORATION 2 : Récupérer le nom actuel de la config
     const configId = localStorage.getItem('soeasyConfigId');
+    const configName = localStorage.getItem('soeasyConfigName') || '';
 
-    if (configId) {
-      $('#config-name-input').attr('placeholder', 'Configuration existante (sera mise à jour)');
+    // Mettre à jour le label
+    if (configId && configName) {
+      $('#modal-save-config .form-label').html('Nom de la configuration : <strong>' + configName + '</strong>');
+      $('#config-name-input')
+        .val(configName)
+        .attr('placeholder', 'Modifier le nom de la configuration');
     } else {
       const date = new Date();
       const dateStr = date.toLocaleDateString('fr-FR');
       const timeStr = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-      $('#config-name-input').attr('placeholder', 'Configuration du ' + dateStr + ' à ' + timeStr);
+      $('#modal-save-config .form-label').html('Nom de la configuration');
+      $('#config-name-input')
+        .val('')
+        .attr('placeholder', 'Configuration du ' + dateStr + ' à ' + timeStr);
     }
 
-    $('#config-name-input').val('');
+    // Masquer le message de notification
     $('#save-config-message').hide();
 
     // Focus sur input après ouverture
     $('#modal-save-config').one('shown.bs.modal', function () {
-      $('#config-name-input').focus();
+      $('#config-name-input').focus().select();
     });
 
     saveModal.show();
 
-    console.log('💾 Modal de sauvegarde ouvert');
+    console.log('💾 Modal de sauvegarde ouvert, configId:', configId, 'configName:', configName);
   };
 
   /**
@@ -243,35 +254,107 @@
    */
   function handleSaveConfiguration() {
     const configName = $('#config-name-input').val().trim();
+    const userId = parseInt(soeasyVars.userId) || 0;
+    const configId = localStorage.getItem('soeasyConfigId') || null;
 
-    console.log('💾 Sauvegarde manuelle demandée, nom:', configName || '(auto)');
+    console.log('💾 Sauvegarde manuelle demandée, nom:', configName || '(auto)', 'configId:', configId);
+
+    // Construire les données
+    const adresses = JSON.parse(localStorage.getItem('soeasyAdresses') || '[]');
+    const config = JSON.parse(localStorage.getItem('soeasyConfig') || '{}');
+
+    // Validation : vérifier qu'il y a des données
+    if (adresses.length === 0 || Object.keys(config).length === 0) {
+      showModalMessage('error', '⚠️ Aucune configuration à sauvegarder. Veuillez d\'abord configurer vos produits.');
+      return;
+    }
+
+    const configData = {
+      userId: userId,
+      adresses: adresses,
+      config: config,
+      dureeEngagement: localStorage.getItem('selectedDureeEngagement') || '0',
+      modeFinancement: localStorage.getItem('selectedFinancementMode') || 'comptant',
+      timestamp: new Date().toISOString()
+    };
+
+    // Nom par défaut si vide
+    const finalConfigName = configName || 'Configuration du ' + new Date().toLocaleDateString('fr-FR');
 
     // Désactiver le bouton pendant la sauvegarde
     const $btn = $('#btn-confirm-save');
     const originalHtml = $btn.html();
     $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Sauvegarde...');
 
-    // Appeler la fonction de sauvegarde (définie dans config-reconciliation.js)
-    if (typeof window.saveConfigurationToDB === 'function') {
-      window.saveConfigurationToDB(configName || null)
-        .then(function () {
-          // Fermer la modal après succès
-          setTimeout(function () {
-            if (saveModal) {
-              saveModal.hide();
-            }
-          }, 1000);
-        })
-        .always(function () {
-          // Réactiver le bouton
-          $btn.prop('disabled', false).html(originalHtml);
-        });
-    } else {
-      console.error('❌ Fonction saveConfigurationToDB non disponible');
+    // Appel AJAX
+    $.ajax({
+      url: soeasyVars.ajaxurl,
+      type: 'POST',
+      data: {
+        action: 'soeasy_ajax_save_configuration',
+        config_id: configId,
+        config_name: finalConfigName,
+        config_data: JSON.stringify(configData),
+        status: 'active',
+        nonce: soeasyVars.nonce_config
+      }
+    }).done(function (response) {
+      if (response.success) {
+        // Stocker l'ID
+        localStorage.setItem('soeasyConfigId', response.data.config_id);
+        localStorage.setItem('soeasyConfigName', finalConfigName);
+
+        // ✅ AMÉLIORATION 1 : Mettre à jour l'auto-save-indicator
+        lastAutoSave = Date.now();
+        localStorage.setItem('soeasyLastAutoSave', lastAutoSave);
+        updateAutoSaveIndicator('saved');
+
+        console.log('✅ Sauvegarde manuelle réussie (ID: ' + response.data.config_id + ')');
+
+        // ✅ AMÉLIORATION 3 : Notification DANS la modal
+        showModalMessage('success', '✓ Configuration sauvegardée avec succès !');
+
+        // Fermer la modal après 1.5 secondes
+        setTimeout(function () {
+          if (saveModal) {
+            saveModal.hide();
+          }
+        }, 1500);
+
+      } else {
+        showModalMessage('error', '❌ Erreur : ' + (response.data?.message || 'Erreur inconnue'));
+      }
+    }).fail(function (xhr, status, error) {
+      console.error('💥 Échec sauvegarde manuelle:', { status, error });
+      showModalMessage('error', '❌ Erreur de communication avec le serveur.');
+    }).always(function () {
+      // Réactiver le bouton
       $btn.prop('disabled', false).html(originalHtml);
-      alert('Erreur : fonction de sauvegarde non disponible');
+    });
+  }
+
+
+  /**
+ * Afficher un message dans la modal
+ */
+  function showModalMessage(type, message) {
+    const $message = $('#save-config-message');
+
+    $message
+      .removeClass('alert-success alert-danger')
+      .addClass(type === 'success' ? 'alert-success' : 'alert-danger')
+      .html(message)
+      .fadeIn(300);
+
+    // Masquer après 3 secondes si erreur
+    if (type === 'error') {
+      setTimeout(function () {
+        $message.fadeOut(300);
+      }, 3000);
     }
   }
+
+
 
   /**
    * ========================================

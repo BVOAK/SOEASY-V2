@@ -142,80 +142,84 @@ function updateAllPrixTotaux() {
 
 function saveToLocalConfig(adresseId, section, nouveauxProduits, options = {}) {
 
-    const key = 'soeasyConfig';
-    const config = JSON.parse(localStorage.getItem(key)) || {};
+  const key = 'soeasyConfig';
+  const config = JSON.parse(localStorage.getItem(key)) || {};
 
-    if (!config[adresseId]) config[adresseId] = {};
-    if (!Array.isArray(config[adresseId][section])) config[adresseId][section] = [];
+  if (!config[adresseId]) config[adresseId] = {};
+  if (!Array.isArray(config[adresseId][section])) config[adresseId][section] = [];
 
-    let existants = config[adresseId][section];
-    let fusionnes = [];
+  let existants = config[adresseId][section];
+  let fusionnes = [];
 
-    if (options.replace === true && options.type) {
-      console.log(`🔄 Replace mode avec type: ${options.type}`);
-      fusionnes = existants.filter(p => p.type !== options.type);
-    } else {
-      fusionnes = [...existants];
-    }
+  if (options.replace === true && options.type) {
+    console.log(`🔄 Replace mode avec type: ${options.type}`);
+    fusionnes = existants.filter(p => p.type !== options.type);
+  } else {
+    fusionnes = [...existants];
+  }
 
-    const indexés = {};
-    fusionnes.forEach(p => {
+  const indexés = {};
+  fusionnes.forEach(p => {
+    const key = p.id || p.nom;
+    indexés[key] = p;
+  });
+
+  if (Array.isArray(nouveauxProduits)) {
+    nouveauxProduits.forEach(p => {
       const key = p.id || p.nom;
       indexés[key] = p;
     });
+  }
 
-    if (Array.isArray(nouveauxProduits)) {
-      nouveauxProduits.forEach(p => {
-        const key = p.id || p.nom;
-        indexés[key] = p;
-      });
-    }
+  config[adresseId][section] = Object.values(indexés);
+  localStorage.setItem(key, JSON.stringify(config));
 
-    config[adresseId][section] = Object.values(indexés);
-    localStorage.setItem(key, JSON.stringify(config));
+  // Envoi AJAX
+  jQuery.post(soeasyVars.ajaxurl, {
+    action: 'soeasy_set_config_part',
+    index: adresseId,
+    key: section,
+    items: config[adresseId][section],
+    nonce: soeasyVars.nonce_config
+  });
 
-    // Envoi AJAX
+  if (section === 'fraisInstallation') {
     jQuery.post(soeasyVars.ajaxurl, {
-      action: 'soeasy_set_config_part',
+      action: 'soeasy_set_frais_installation',
       index: adresseId,
-      key: section,
       items: config[adresseId][section],
       nonce: soeasyVars.nonce_config
     });
-
-    if (section === 'fraisInstallation') {
-      jQuery.post(soeasyVars.ajaxurl, {
-        action: 'soeasy_set_frais_installation',
-        index: adresseId,
-        items: config[adresseId][section],
-        nonce: soeasyVars.nonce_config
-      });
-    }
-
-    // 🆕 NOTIFICATION SIDEBAR (si besoin)
-    if (options.notifyChange !== false) {
-      notifySidebarProductAdded();
-    }
-
-    // Mise à jour localStorage
-    localStorage.setItem('soeasyConfig', JSON.stringify(config));
-    
-    // ✅ AJOUT 1 : Ajouter user_id si connecté (déjà existant)
-    if (typeof soeasyVars !== 'undefined' && soeasyVars.userId) {
-      localStorage.setItem('soeasyUserId', soeasyVars.userId);
-    }
-    
-    // ✅ AJOUT 2 : Mettre à jour timestamp de dernière sync (déjà existant)
-    localStorage.setItem('soeasyLastSync', new Date().toISOString());
-    
-    // ✅ NOUVEAU : Déclencher auto-save automatiquement
-    if (typeof window.scheduleAutoSave === 'function') {
-      window.scheduleAutoSave();
-    }
-    
-    console.log(`💾 Config sauvegardée localement: ${section} pour adresse ${adresseId}`, config);
-
   }
+
+  // NOTIFICATION SIDEBAR (si besoin)
+  if (options.notifyChange !== false) {
+    notifySidebarProductAdded();
+  }
+
+  if (typeof window.updateCompleteSidebar === 'function') {
+    window.updateCompleteSidebar();
+  }
+
+  // Mise à jour localStorage
+  localStorage.setItem('soeasyConfig', JSON.stringify(config));
+
+  // ✅ AJOUT 1 : Ajouter user_id si connecté (déjà existant)
+  if (typeof soeasyVars !== 'undefined' && soeasyVars.userId) {
+    localStorage.setItem('soeasyUserId', soeasyVars.userId);
+  }
+
+  // ✅ AJOUT 2 : Mettre à jour timestamp de dernière sync (déjà existant)
+  localStorage.setItem('soeasyLastSync', new Date().toISOString());
+
+  // ✅ NOUVEAU : Déclencher auto-save automatiquement
+  if (typeof window.scheduleAutoSave === 'function') {
+    window.scheduleAutoSave();
+  }
+
+  console.log(`💾 Config sauvegardée localement: ${section} pour adresse ${adresseId}`, config);
+
+}
 
 
 // Notification automatique quand un produit est ajouté
@@ -762,8 +766,9 @@ jQuery(document).ready(function ($) {
     }
 
     Object.entries(recapData).forEach(([index, config]) => {
-      // ✅ NOUVEAU : Utiliser ville_longue depuis les données enrichies
+      // Utiliser ville_longue depuis les données enrichies
       const adresseData = adressesData[index];
+
       let displayName;
 
       if (adresseData && adresseData.ville_longue) {
@@ -1649,5 +1654,236 @@ jQuery(document).ready(function ($) {
   // Exposer les fonctions globalement
   window.generateStep6Content = generateStep6Content;
   window.updateRecapTotals = updateRecapTotals;
+
+  /**
+ * ========================================
+ * SIDEBAR LOCALSTORAGE - FONCTION CENTRALE
+ * ========================================
+ */
+
+  /**
+   * Mise à jour complète de la sidebar depuis localStorage
+   * Appelée après chaque modification de config
+   */
+  function updateCompleteSidebar() {
+    console.log('🎨 Mise à jour complète sidebar depuis localStorage');
+
+    try {
+      // 1. Récupérer données localStorage
+      const config = JSON.parse(localStorage.getItem('soeasyConfig') || '{}');
+      const adresses = JSON.parse(localStorage.getItem('soeasyAdresses') || '[]');
+
+      // 2. Vérifier état vide
+      if (Object.keys(config).length === 0 || adresses.length === 0) {
+        $('#config-recapitulatif').html(`
+        <div class="text-center p-4 text-muted">
+          <i class="fas fa-shopping-cart fa-3x mb-3 opacity-50"></i>
+          <p class="mb-2"><strong>Aucun produit configuré</strong></p>
+          <small>Commencez par ajouter une adresse au step 1</small>
+        </div>
+      `);
+        $('#config-sidebar-total').empty();
+        updateCartBadge(0);
+        return;
+      }
+
+      // 3. Mettre à jour les produits (fonction existante)
+      updateSidebarProduitsRecap();
+
+      // 4. Mettre à jour les totaux (fonction existante)
+      updateSidebarTotauxRecap();
+
+      // 5. Mettre à jour le badge compteur
+      const count = countTotalProductsInConfig(config);
+      updateCartBadge(count);
+
+      console.log('✅ Sidebar mise à jour avec', count, 'produit(s)');
+
+    } catch (error) {
+      console.error('❌ Erreur mise à jour sidebar:', error);
+    }
+  }
+
+  /**
+   * Compter le nombre total de produits dans la config
+   */
+  function countTotalProductsInConfig(config) {
+    let count = 0;
+
+    Object.values(config).forEach(adresseData => {
+      ['abonnements', 'materiels', 'fraisInstallation'].forEach(section => {
+        if (Array.isArray(adresseData[section])) {
+          adresseData[section].forEach(produit => {
+            count += parseInt(produit.quantite) || 1;
+          });
+        }
+      });
+    });
+
+    return count;
+  }
+
+  /**
+   * Mettre à jour le badge compteur
+   */
+  function updateCartBadge(count) {
+    const $badge = $('#cart-count');
+
+    if (count > 0) {
+      $badge.text(count).show();
+    } else {
+      $badge.text('0').hide();
+    }
+  }
+
+  // Exposer globalement pour appel depuis d'autres fichiers
+  window.updateCompleteSidebar = updateCompleteSidebar;
+
+
+  /**
+ * Nettoyer les index orphelins dans soeasyConfig
+ * Appelé après suppression d'adresse ou au chargement
+ */
+  function cleanOrphanConfigIndexes() {
+    const adresses = JSON.parse(localStorage.getItem('soeasyAdresses') || '[]');
+    const config = JSON.parse(localStorage.getItem('soeasyConfig') || '{}');
+
+    // Créer un nouvel objet avec seulement les index valides
+    const cleanedConfig = {};
+    let hasOrphans = false;
+
+    adresses.forEach((addr, index) => {
+      if (config[index]) {
+        cleanedConfig[index] = config[index];
+      }
+    });
+
+    // Détecter les orphelins
+    Object.keys(config).forEach(key => {
+      if (!cleanedConfig[key]) {
+        hasOrphans = true;
+        console.warn('⚠️ Index orphelin détecté et supprimé:', key);
+      }
+    });
+
+    // Sauvegarder si des orphelins ont été trouvés
+    if (hasOrphans) {
+      localStorage.setItem('soeasyConfig', JSON.stringify(cleanedConfig));
+      console.log('✅ Config nettoyée, index orphelins supprimés');
+      return true;
+    }
+
+    return false;
+  }
+
+  window.cleanOrphanConfigIndexes = cleanOrphanConfigIndexes;
+
+  /**
+ * ========================================
+ * RÉCONCILIATION AU CHARGEMENT
+ * ========================================
+ */
+
+  /**
+   * Vérifier si on doit charger une config depuis la BDD
+   * Appelé au chargement de la page si user connecté
+   */
+  function reconcileConfigurationOnLoad() {
+    const userId = parseInt(soeasyVars.userId) || 0;
+
+    // Si guest, pas de réconciliation
+    if (userId === 0) {
+      console.log('👤 Guest : pas de réconciliation');
+      return Promise.resolve();
+    }
+
+    // Vérifier état du localStorage
+    const adresses = JSON.parse(localStorage.getItem('soeasyAdresses') || '[]');
+    const config = JSON.parse(localStorage.getItem('soeasyConfig') || '{}');
+
+    // Si localStorage est vide ou incomplet
+    const isEmpty = adresses.length === 0 || Object.keys(config).length === 0;
+
+    if (!isEmpty) {
+      console.log('✅ User connecté avec config déjà en localStorage');
+      return Promise.resolve();
+    }
+
+    console.log('📥 User connecté avec localStorage vide → Chargement depuis BDD');
+
+    // Charger depuis BDD
+    return $.ajax({
+      url: soeasyVars.ajaxurl,
+      type: 'POST',
+      data: {
+        action: 'soeasy_ajax_load_last_configuration',
+        nonce: soeasyVars.nonce_config
+      }
+    }).done(function (response) {
+      if (response.success) {
+        const configData = response.data.config_data;
+
+        console.log('✅ Config chargée depuis BDD:', response.data.config_name);
+
+        // Restaurer dans localStorage
+        if (configData.adresses) {
+          localStorage.setItem('soeasyAdresses', JSON.stringify(configData.adresses));
+        }
+
+        if (configData.config) {
+          localStorage.setItem('soeasyConfig', JSON.stringify(configData.config));
+        }
+
+        if (configData.dureeEngagement) {
+          localStorage.setItem('selectedDureeEngagement', configData.dureeEngagement);
+        }
+
+        if (configData.modeFinancement) {
+          localStorage.setItem('selectedFinancementMode', configData.modeFinancement);
+        }
+
+        // Stocker les métadonnées
+        localStorage.setItem('soeasyConfigId', response.data.config_id);
+        localStorage.setItem('soeasyConfigName', response.data.config_name);
+        localStorage.setItem('soeasyUserId', userId);
+
+        console.log('✅ localStorage restauré depuis BDD');
+
+        // Mettre à jour la sidebar
+        if (typeof window.updateCompleteSidebar === 'function') {
+          window.updateCompleteSidebar();
+        }
+
+      } else {
+        console.log('ℹ️ Aucune config sauvegardée pour cet utilisateur');
+      }
+    }).fail(function (xhr, status, error) {
+      console.error('❌ Erreur chargement config:', error);
+    });
+  }
+
+  // Exposer globalement
+  window.reconcileConfigurationOnLoad = reconcileConfigurationOnLoad;
+
+  // Initialiser au chargement de la page
+  $(document).ready(function () {
+    
+    // Réconciliation (charger depuis BDD si nécessaire)
+    reconcileConfigurationOnLoad().then(function() {
+       // Nettoyer les orphelins
+      cleanOrphanConfigIndexes();
+      // Mettre à jour sidebar
+      updateCompleteSidebar();
+    });
+
+    // Listener storage pour mises à jour cross-window
+    window.addEventListener('storage', function (e) {
+      if (e.key === 'soeasyConfig' || e.key === 'soeasyAdresses') {
+        console.log('📡 Storage event détecté, mise à jour sidebar');
+        cleanOrphanConfigIndexes();
+        updateCompleteSidebar();
+      }
+    });
+  });
 
 });

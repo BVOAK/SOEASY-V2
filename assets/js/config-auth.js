@@ -166,9 +166,9 @@
         // Notification succès
         if (typeof showToastSuccess === 'function') {
           showToastSuccess('Connexion réussie ! Rechargement en cours...');
-        } else {
+        } /* else {
           alert('Connexion réussie !');
-        }
+        } */
 
         // ✅ MARQUER qu'on vient de se connecter (pour ouvrir modal après reload)
         localStorage.setItem('soeasy_just_logged_in', '1');
