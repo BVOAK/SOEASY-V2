@@ -165,32 +165,18 @@
 
         // Notification succès
         if (typeof showToastSuccess === 'function') {
-          showToastSuccess('Connexion réussie ! Bienvenue ' + response.data.user_display_name);
+          showToastSuccess('Connexion réussie ! Rechargement en cours...');
+        } else {
+          alert('Connexion réussie !');
         }
 
-        // ✅ METTRE À JOUR soeasyVars
-        if (typeof soeasyVars !== 'undefined') {
-          soeasyVars.userId = response.data.user_id;
-          soeasyVars.userDisplayName = response.data.user_display_name;
-          soeasyVars.nonce_config = response.data.nonce_config;
-          soeasyVars.nonce_cart = response.data.nonce_cart;
-          soeasyVars.nonce_address = response.data.nonce_address;
-        }
+        // ✅ MARQUER qu'on vient de se connecter (pour ouvrir modal après reload)
+        localStorage.setItem('soeasy_just_logged_in', '1');
 
-        // Mettre à jour localStorage
-        localStorage.setItem('soeasyUserId', response.data.user_id);
-
-        // Mettre à jour le bouton de sauvegarde
-        if (typeof window.updateSaveButton === 'function') {
-          window.updateSaveButton();
-        }
-
-        // Ouvrir le modal de sauvegarde
+        // ✅ RECHARGER LA PAGE après 1 seconde
         setTimeout(function () {
-          if (typeof window.showSaveConfigModal === 'function') {
-            window.showSaveConfigModal();
-          }
-        }, 500);
+          window.location.reload();
+        }, 1000);
 
       } else {
         // Erreur de connexion

@@ -13,7 +13,7 @@
  * @date 2025-12-06
  */
 
-(function($) {
+(function ($) {
   'use strict';
 
   /**
@@ -21,7 +21,7 @@
    * VARIABLES GLOBALES
    * ========================================
    */
-  
+
   let saveModal = null;
   let autoSaveTimer = null;
   let lastAutoSave = 0;
@@ -32,12 +32,39 @@
    * INITIALISATION
    * ========================================
    */
-  
-  $(document).ready(function() {
+
+  $(document).ready(function () {
     initSaveModal();
     bindSaveEvents();
     updateSaveButton();
+    checkJustLoggedIn();
   });
+
+  /**
+ * Vérifier si on vient de se connecter et ouvrir le modal
+ */
+  function checkJustLoggedIn() {
+    const justLoggedIn = localStorage.getItem('soeasy_just_logged_in');
+
+    if (justLoggedIn === '1') {
+      console.log('🔓 Détection login récent, ouverture modal sauvegarde');
+
+      // Supprimer le flag
+      localStorage.removeItem('soeasy_just_logged_in');
+
+      // Ouvrir le modal de sauvegarde après un court délai
+      setTimeout(function () {
+        const userId = parseInt(soeasyVars.userId) || 0;
+
+        if (userId > 0) {
+          // User connecté : ouvrir modal sauvegarde
+          if (typeof window.showSaveConfigModal === 'function') {
+            window.showSaveConfigModal();
+          }
+        }
+      }, 500);
+    }
+  }
 
   /**
    * ========================================
@@ -63,17 +90,17 @@
       if (userId > 0) {
         // User connecté : bouton sauvegarde normal
         $btn.html('<i class="fas fa-save me-1"></i> Sauvegarder')
-            .removeClass('btn-outline-primary')
-            .addClass('btn-success')
-            .attr('title', 'Sauvegarder cette configuration')
-            .show();
+          .removeClass('btn-outline-primary')
+          .addClass('btn-success')
+          .attr('title', 'Sauvegarder cette configuration')
+          .show();
       } else {
         // Guest : bouton qui ouvre la connexion
         $btn.html('<i class="fas fa-lock me-1"></i> Se connecter pour sauvegarder')
-            .removeClass('btn-success')
-            .addClass('btn-outline-primary')
-            .attr('title', 'Connectez-vous pour sauvegarder votre configuration')
-            .show();
+          .removeClass('btn-success')
+          .addClass('btn-outline-primary')
+          .attr('title', 'Connectez-vous pour sauvegarder votre configuration')
+          .show();
       }
     } else {
       $btn.hide();
@@ -100,7 +127,7 @@
   /**
    * Ouvrir le modal de sauvegarde
    */
-  window.showSaveConfigModal = function() {
+  window.showSaveConfigModal = function () {
     const userId = parseInt(soeasyVars.userId) || 0;
 
     if (userId === 0) {
@@ -125,7 +152,7 @@
     } else {
       const date = new Date();
       const dateStr = date.toLocaleDateString('fr-FR');
-      const timeStr = date.toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'});
+      const timeStr = date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
       $('#config-name-input').attr('placeholder', 'Configuration du ' + dateStr + ' à ' + timeStr);
     }
 
@@ -133,7 +160,7 @@
     $('#save-config-message').hide();
 
     // Focus sur input après ouverture
-    $('#modal-save-config').one('shown.bs.modal', function() {
+    $('#modal-save-config').one('shown.bs.modal', function () {
       $('#config-name-input').focus();
     });
 
@@ -150,7 +177,7 @@
 
   function bindSaveEvents() {
     // Clic sur bouton "Sauvegarder" dans la sidebar
-    $(document).on('click', '#btn-save-config', function() {
+    $(document).on('click', '#btn-save-config', function () {
       const userId = parseInt(soeasyVars.userId) || 0;
 
       if (userId > 0) {
@@ -168,12 +195,12 @@
     });
 
     // Clic sur bouton "Confirmer" dans modal sauvegarde
-    $(document).on('click', '#btn-confirm-save', function() {
+    $(document).on('click', '#btn-confirm-save', function () {
       handleSaveConfiguration();
     });
 
     // Touche Entrée dans l'input du nom
-    $(document).on('keypress', '#config-name-input', function(e) {
+    $(document).on('keypress', '#config-name-input', function (e) {
       if (e.which === 13) {
         e.preventDefault();
         handleSaveConfiguration();
@@ -203,15 +230,15 @@
     // Appeler la fonction de sauvegarde (définie dans config-reconciliation.js)
     if (typeof window.saveConfigurationToDB === 'function') {
       window.saveConfigurationToDB(configName || null)
-        .then(function() {
+        .then(function () {
           // Fermer la modal après succès
-          setTimeout(function() {
+          setTimeout(function () {
             if (saveModal) {
               saveModal.hide();
             }
           }, 1000);
         })
-        .always(function() {
+        .always(function () {
           // Réactiver le bouton
           $btn.prop('disabled', false).html(originalHtml);
         });
@@ -232,7 +259,7 @@
    * Planifier une auto-save avec debouncing
    * Appelé après chaque modification de la config
    */
-  window.scheduleAutoSave = function() {
+  window.scheduleAutoSave = function () {
     // Vérifier que user est connecté
     const userId = parseInt(soeasyVars.userId) || 0;
     if (userId === 0) {
@@ -242,7 +269,7 @@
     // Débouncer pour éviter trop de requêtes
     clearTimeout(autoSaveTimer);
 
-    autoSaveTimer = setTimeout(function() {
+    autoSaveTimer = setTimeout(function () {
       const now = Date.now();
 
       // Cooldown : ne pas sauvegarder si dernière sauvegarde < 10 secondes
