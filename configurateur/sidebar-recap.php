@@ -65,15 +65,12 @@
         <!-- Contenu injecté dynamiquement -->
       </div>
 
-      <div id="config-sidebar-backup">
-        <?php if (is_user_logged_in()): ?>
-          <!-- Bouton Sauvegarder (visible seulement si connecté) -->
-          <button type="button" class="btn btn-sm btn-success" id="btn-save-config" style="display: none;"
-            title="Sauvegarder cette configuration">
-            <i class="fas fa-save me-1"></i> Sauvegarder
-          </button>
-        <?php endif; ?>
-      </div>
+
+      <!-- Bouton Sauvegarder (visible seulement si connecté) -->
+      <button type="button" class="btn btn-sm btn-success mt-4" id="btn-save-config" style="display: none;">
+        <i class="fas fa-save me-1"></i> Sauvegarder
+      </button>
+
 
       <?php get_template_part('template-parts/reassurance'); ?>
 
@@ -81,42 +78,114 @@
   </div>
 </div>
 
-<?php if (is_user_logged_in()): ?>
-  <!-- Modal Sauvegarde -->
-  <div class="modal fade" id="modal-save-config" tabindex="-1" aria-labelledby="modalSaveConfigLabel" aria-hidden="true">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="modalSaveConfigLabel">
-            <i class="fas fa-save me-2"></i>
-            Sauvegarder la configuration
-          </h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <div class="mb-3">
-            <label for="config-name-input" class="form-label">
-              Nom de la configuration
-            </label>
-            <input type="text" class="form-control" id="config-name-input" placeholder="Ma configuration télécom"
-              maxlength="100">
-            <div class="form-text">
-              Laissez vide pour générer un nom automatique
-            </div>
-          </div>
 
-          <div id="save-config-message" class="alert" style="display: none;"></div>
+
+<!-- ============================================ -->
+<!-- MODAL SAUVEGARDE CONFIGURATION -->
+<!-- ============================================ -->
+<div class="modal fade" id="modal-save-config" tabindex="-1" aria-labelledby="modalSaveConfigLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalSaveConfigLabel">
+          <i class="fas fa-save me-2"></i>
+          Sauvegarder la configuration
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label for="config-name-input" class="form-label">
+            Nom de la configuration
+          </label>
+          <input type="text" class="form-control" id="config-name-input" placeholder="Ma configuration télécom"
+            maxlength="100">
+          <div class="form-text">
+            Laissez vide pour générer un nom automatique
+          </div>
         </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-            Annuler
-          </button>
-          <button type="button" class="btn btn-success" id="btn-confirm-save">
-            <i class="fas fa-save me-1"></i>
-            Sauvegarder
-          </button>
-        </div>
+
+        <div id="save-config-message" class="alert" style="display: none;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          Annuler
+        </button>
+        <button type="button" class="btn btn-success" id="btn-confirm-save">
+          <i class="fas fa-save me-1"></i>
+          Sauvegarder
+        </button>
       </div>
     </div>
   </div>
-<?php endif; ?>
+</div>
+
+<!-- ============================================ -->
+<!-- MODAL CONNEXION -->
+<!-- ============================================ -->
+<div class="modal fade" id="modal-login" tabindex="-1" aria-labelledby="modalLoginLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalLoginLabel">
+          <i class="fas fa-user-circle me-2"></i>
+          Connexion requise
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted mb-4">
+          <i class="fas fa-info-circle me-1"></i>
+          Connectez-vous pour sauvegarder votre configuration et la retrouver plus tard.
+        </p>
+
+        <form id="form-login-ajax">
+          <div class="mb-3">
+            <label for="login-username" class="form-label">
+              <i class="fas fa-user me-1"></i>
+              Nom d'utilisateur ou email
+            </label>
+            <input type="text" class="form-control" id="login-username" name="username" required autocomplete="username"
+              placeholder="votre-email@exemple.com">
+          </div>
+
+          <div class="mb-3">
+            <label for="login-password" class="form-label">
+              <i class="fas fa-lock me-1"></i>
+              Mot de passe
+            </label>
+            <input type="password" class="form-control" id="login-password" name="password" required
+              autocomplete="current-password" placeholder="••••••••">
+          </div>
+
+          <div class="mb-3 form-check">
+            <input type="checkbox" class="form-check-input" id="login-remember" name="remember" value="1">
+            <label class="form-check-label" for="login-remember">
+              Se souvenir de moi
+            </label>
+          </div>
+
+          <div id="login-error-message" class="alert alert-danger" style="display: none;"></div>
+        </form>
+
+        <div class="text-center mt-3">
+          <small class="text-muted">
+            Pas encore de compte ?
+            <a href="<?php echo esc_url(wc_get_page_permalink('myaccount')); ?>" target="_blank">
+              Créer un compte
+            </a>
+          </small>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          Annuler
+        </button>
+        <button type="submit" form="form-login-ajax" class="btn btn-primary" id="btn-submit-login">
+          <i class="fas fa-sign-in-alt me-1"></i>
+          Se connecter
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

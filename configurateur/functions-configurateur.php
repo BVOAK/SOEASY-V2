@@ -2144,7 +2144,68 @@ function soeasy_ajax_load_last_configuration() {
 add_action('wp_ajax_soeasy_ajax_load_last_configuration', 'soeasy_ajax_load_last_configuration');
 
 
-
+/**
+ * AJAX : Connexion utilisateur sans rechargement
+ * 
+ * POST params:
+ * - username : Nom d'utilisateur ou email
+ * - password : Mot de passe
+ * - remember : 1 ou 0
+ * - nonce : soeasy_config_action
+ * 
+ * Response:
+ * - success: { user_id, user_display_name }
+ * - error: { message }
+ */
+function soeasy_ajax_login() {
+    error_log('=== DÉBUT LOGIN AJAX ===');
+    
+    try {
+        // Vérifier nonce
+        soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+        
+        $username = sanitize_text_field($_POST['username'] ?? '');
+        $password = $_POST['password'] ?? '';
+        $remember = ($_POST['remember'] ?? '0') === '1';
+        
+        if (empty($username) || empty($password)) {
+            wp_send_json_error(['message' => 'Nom d\'utilisateur et mot de passe requis']);
+        }
+        
+        error_log('Tentative de connexion pour: ' . $username);
+        
+        // Tentative d'authentification
+        $creds = [
+            'user_login'    => $username,
+            'user_password' => $password,
+            'remember'      => $remember
+        ];
+        
+        $user = wp_signon($creds, is_ssl());
+        
+        if (is_wp_error($user)) {
+            error_log('❌ Échec connexion: ' . $user->get_error_message());
+            wp_send_json_error(['message' => 'Identifiants incorrects']);
+        }
+        
+        // Connexion réussie
+        wp_set_current_user($user->ID);
+        wp_set_auth_cookie($user->ID, $remember);
+        
+        error_log('✅ Connexion réussie pour user ID=' . $user->ID);
+        
+        wp_send_json_success([
+            'user_id' => $user->ID,
+            'user_display_name' => $user->display_name,
+            'message' => 'Connexion réussie'
+        ]);
+        
+    } catch (Exception $e) {
+        error_log('💥 Exception dans ajax_login: ' . $e->getMessage());
+        wp_send_json_error(['message' => 'Erreur serveur']);
+    }
+}
+add_action('wp_ajax_nopriv_soeasy_ajax_login', 'soeasy_ajax_login');
 
 /**
  * ============================================================================

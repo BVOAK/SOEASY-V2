@@ -465,16 +465,7 @@ function soeasy_enqueue_configurateur_assets_conditionnel() {
 			true
 		);
 
-		// Config Reconciliation - NOUVEAU (à placer APRÈS auth-reset.js, AVANT configurateur-fonctions.js)
-		wp_enqueue_script(
-			'soeasy-config-reconciliation',
-			get_template_directory_uri() . '/assets/js/config-reconciliation.js',
-			array('jquery'),
-			filemtime(get_template_directory() . '/assets/js/config-reconciliation.js'),
-			true
-		);
-
-        // ✅ 2. FONCTIONS CONFIGURATEUR
+        // FONCTIONS CONFIGURATEUR
         wp_enqueue_script(
             'soeasy-configurateur-fonctions',
             get_template_directory_uri() . '/assets/js/configurateur-fonctions.js',
@@ -483,7 +474,35 @@ function soeasy_enqueue_configurateur_assets_conditionnel() {
             true
         );
 
-        // ✅ 3. SIDEBAR MANAGER
+        // Config Reconciliation - NOUVEAU (à placer APRÈS auth-reset.js, AVANT configurateur-fonctions.js)
+		wp_enqueue_script(
+			'soeasy-config-reconciliation',
+			get_template_directory_uri() . '/assets/js/config-reconciliation.js',
+			array('jquery'),
+			filemtime(get_template_directory() . '/assets/js/config-reconciliation.js'),
+			true
+		);
+
+
+        // Auth (connexion modal)
+        wp_enqueue_script(
+            'soeasy-config-auth',
+            get_template_directory_uri() . '/assets/js/config-auth.js',
+            array('jquery'),
+            filemtime(get_template_directory() . '/assets/js/config-auth.js'),
+            true
+        );
+
+        // CONGIF SAVE
+        wp_enqueue_script(
+            'soeasy-config-save',
+            get_template_directory_uri() . '/assets/js/config-save.js',
+            array('jquery'),
+            filemtime(get_template_directory() . '/assets/js/config-save.js'),
+            true
+        );
+
+        // SIDEBAR MANAGER
         wp_enqueue_script(
             'soeasy-sidebar-manager',
             get_template_directory_uri() . '/assets/js/sidebar-manager.js',
@@ -492,20 +511,11 @@ function soeasy_enqueue_configurateur_assets_conditionnel() {
             true
         );
 
-        // ✅ 4. AUTOSAVE
-        wp_enqueue_script(
-            'soeasy-config-autosave',
-            get_template_directory_uri() . '/assets/js/config-autosave.js',
-            array('jquery'),
-            filemtime(get_template_directory() . '/assets/js/config-autosave.js'),
-            true
-        );
-
-        // ✅ 4. CONFIGURATEUR
+        // CONFIGURATEUR
         wp_enqueue_script(
             'soeasy-configurateur',
             get_template_directory_uri() . '/assets/js/configurateur.js',
-            array('jquery', 'soeasy-auth-reset', 'soeasy-config-reconciliation', 'soeasy-config-autosave', 'soeasy-configurateur-fonctions'),
+            array('jquery', 'soeasy-auth-reset', 'soeasy-config-reconciliation', 'soeasy-config-save', 'soeasy-configurateur-fonctions'),
             filemtime(get_template_directory() . '/assets/js/configurateur.js'),
             true
         );

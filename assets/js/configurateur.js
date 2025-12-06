@@ -225,6 +225,10 @@ jQuery(document).ready(function ($) {
       });
     }
 
+    if (typeof window.updateSaveButton === 'function') {
+      window.updateSaveButton();
+    }
+
     // Affichage immédiat pour toutes les étapes (y compris step 5)
     setTimeout(() => {
       renderStep(step);
@@ -279,7 +283,9 @@ jQuery(document).ready(function ($) {
         }
       }, 200);
 
-      //reconcileConfiguration();
+      if (typeof window.updateSaveButton === 'function') {
+        window.updateSaveButton();
+      }
 
       updateRecapitulatif();
     });
@@ -569,6 +575,7 @@ jQuery(document).ready(function ($) {
 
             if (response.data.addresses_enriched) {
               localStorage.setItem('soeasyAdresses', JSON.stringify(response.data.addresses_enriched));
+              window.updateSaveButton();
             }
 
             // MàJ du localStorage
@@ -593,6 +600,10 @@ jQuery(document).ready(function ($) {
     // Suppression d’une adresse
     $(document).on('click', '.btn-remove-adresse', function () {
       const index = $(this).data('index');
+
+      if (typeof window.updateSaveButton === 'function') {
+        window.updateSaveButton();
+      }
 
       $.ajax({
         url: soeasyVars.ajaxurl,
