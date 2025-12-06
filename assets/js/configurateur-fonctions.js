@@ -197,7 +197,23 @@ function saveToLocalConfig(adresseId, section, nouveauxProduits, options = {}) {
       notifySidebarProductAdded();
     }
 
-    console.log(`✅ saveToLocalConfig terminé pour index ${adresseId}, section ${section}`);
+    // Mise à jour localStorage
+    localStorage.setItem('soeasyConfig', JSON.stringify(config));
+    
+    // ✅ AJOUT 1 : Ajouter user_id si connecté (déjà existant)
+    if (typeof soeasyVars !== 'undefined' && soeasyVars.userId) {
+      localStorage.setItem('soeasyUserId', soeasyVars.userId);
+    }
+    
+    // ✅ AJOUT 2 : Mettre à jour timestamp de dernière sync (déjà existant)
+    localStorage.setItem('soeasyLastSync', new Date().toISOString());
+    
+    // ✅ NOUVEAU : Déclencher auto-save automatiquement
+    if (typeof window.scheduleAutoSave === 'function') {
+      window.scheduleAutoSave();
+    }
+    
+    console.log(`💾 Config sauvegardée localement: ${section} pour adresse ${adresseId}`, config);
 
   }
 

@@ -38,7 +38,31 @@
     bindSaveEvents();
     updateSaveButton();
     checkJustLoggedIn();
+    initAutoSaveIndicator();
   });
+
+
+  /**
+ * Initialiser l'indicateur d'auto-save au chargement
+ */
+  function initAutoSaveIndicator() {
+    const userId = parseInt(soeasyVars.userId) || 0;
+
+    if (userId === 0) {
+      // Guest : masquer l'indicateur
+      $('#auto-save-indicator').hide();
+      return;
+    }
+
+    // User connecté : afficher le dernier timestamp si disponible
+    const lastSave = localStorage.getItem('soeasyLastAutoSave');
+
+    if (lastSave) {
+      updateAutoSaveIndicator('saved');
+    } else {
+      $('#auto-save-indicator').hide();
+    }
+  }
 
   /**
  * Vérifier si on vient de se connecter et ouvrir le modal
@@ -286,13 +310,135 @@
    * Exécuter l'auto-save
    */
   function performAutoSave() {
+    const userId = parseInt(soeasyVars.userId) || 0;
+
+    if (userId === 0) {
+      console.log('⚠️ Auto-save impossible : utilisateur non connecté');
+      return;
+    }
+
     console.log('💾 Auto-save en cours...');
 
-    // TODO Phase 3 : Implémenter l'endpoint soeasy_ajax_auto_save_configuration
-    // Pour l'instant, on skip
-    console.log('ℹ️ Auto-save non encore implémenté (Phase 3)');
+    // Afficher l'indicateur "Sauvegarde en cours..."
+    updateAutoSaveIndicator('saving');
 
-    lastAutoSave = Date.now();
+    $.ajax({
+      url: soeasyVars.ajaxurl,
+      type: 'POST',
+      data: {
+        action: 'soeasy_ajax_auto_save_configuration',
+        nonce: soeasyVars.nonce_config
+      }
+    }).done(function (response) {
+      if (response.success) {
+        lastAutoSave = Date.now();
+
+        // Stocker le timestamp de dernière sauvegarde
+        localStorage.setItem('soeasyLastAutoSave', lastAutoSave);
+
+        // Stocker l'ID du draft si nouveau
+        if (response.data.is_new && response.data.config_id) {
+          localStorage.setItem('soeasyDraftId', response.data.config_id);
+        }
+
+        console.log('✅ Auto-save réussie (ID: ' + response.data.config_id + ')');
+
+        // Afficher l'indicateur "Sauvegardé"
+        updateAutoSaveIndicator('saved');
+
+      } else {
+        console.error('❌ Erreur auto-save:', response.data);
+        updateAutoSaveIndicator('error');
+      }
+    }).fail(function (xhr, status, error) {
+      console.error('💥 Échec auto-save:', { status, error });
+      updateAutoSaveIndicator('error');
+    });
+  }
+
+  /**
+   * Mettre à jour l'indicateur visuel d'auto-save
+   * 
+   * @param {string} state - 'saving', 'saved', 'error'
+   */
+  function updateAutoSaveIndicator(state) {
+    const $indicator = $('#auto-save-indicator');
+
+    if ($indicator.length === 0) {
+      return;
+    }
+
+    switch (state) {
+      case 'saving':
+        $indicator
+          .removeClass('text-success text-danger')
+          .addClass('text-muted')
+          .html('<i class="fas fa-spinner fa-spin me-1"></i> Sauvegarde...')
+          .show();
+        break;
+
+      case 'saved':
+        const lastSave = localStorage.getItem('soeasyLastAutoSave');
+        const timeAgo = lastSave ? getTimeAgo(parseInt(lastSave)) : 'à l\'instant';
+
+        $indicator
+          .removeClass('text-muted text-danger')
+          .addClass('text-success')
+          .html('<i class="fas fa-check-circle me-1"></i> Sauvegardé ' + timeAgo)
+          .show();
+
+        // Mettre à jour le texte toutes les 30 secondes
+        updateAutoSaveTimestamp();
+        break;
+
+      case 'error':
+        $indicator
+          .removeClass('text-success text-muted')
+          .addClass('text-danger')
+          .html('<i class="fas fa-exclamation-triangle me-1"></i> Erreur de sauvegarde')
+          .show();
+        break;
+    }
+  }
+
+  /**
+   * Calculer "il y a X min/sec"
+   */
+  function getTimeAgo(timestamp) {
+    const now = Date.now();
+    const diff = Math.floor((now - timestamp) / 1000); // secondes
+
+    if (diff < 10) {
+      return 'à l\'instant';
+    } else if (diff < 60) {
+      return 'il y a ' + diff + ' sec';
+    } else if (diff < 3600) {
+      const minutes = Math.floor(diff / 60);
+      return 'il y a ' + minutes + ' min';
+    } else {
+      const hours = Math.floor(diff / 3600);
+      return 'il y a ' + hours + ' h';
+    }
+  }
+
+  /**
+   * Mettre à jour le timestamp toutes les 30 secondes
+   */
+  function updateAutoSaveTimestamp() {
+    clearInterval(window.autoSaveTimestampInterval);
+
+    window.autoSaveTimestampInterval = setInterval(function () {
+      const lastSave = localStorage.getItem('soeasyLastAutoSave');
+
+      if (lastSave) {
+        const timeAgo = getTimeAgo(parseInt(lastSave));
+        const $indicator = $('#auto-save-indicator');
+
+        if ($indicator.hasClass('text-success')) {
+          $indicator.html('<i class="fas fa-check-circle me-1"></i> Sauvegardé ' + timeAgo);
+        }
+      }
+    }, 30000); // Toutes les 30 secondes
   }
 
 })(jQuery);

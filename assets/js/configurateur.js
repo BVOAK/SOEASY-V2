@@ -585,6 +585,10 @@ jQuery(document).ready(function ($) {
               window.updateSaveButton();
             }
 
+            if (typeof window.scheduleAutoSave === 'function') {
+              window.scheduleAutoSave();
+            }
+
             $(".btn-suivant").removeClass("disabled");
 
           } else {

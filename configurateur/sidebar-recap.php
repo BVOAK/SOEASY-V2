@@ -71,6 +71,13 @@
         <i class="fas fa-save me-1"></i> Sauvegarder
       </button>
 
+      <!-- Indicateur auto-save -->
+      <div id="auto-save-indicator" 
+         class="small text-muted" 
+         style="display: none;">
+        <i class="fas fa-spinner fa-spin me-1"></i> Initialisation...
+      </div>
+
 
       <?php get_template_part('template-parts/reassurance'); ?>
 
