@@ -65,7 +65,58 @@
         <!-- Contenu injecté dynamiquement -->
       </div>
 
+      <div id="config-sidebar-backup">
+        <?php if (is_user_logged_in()): ?>
+          <!-- Bouton Sauvegarder (visible seulement si connecté) -->
+          <button type="button" class="btn btn-sm btn-success" id="btn-save-config" style="display: none;"
+            title="Sauvegarder cette configuration">
+            <i class="fas fa-save me-1"></i> Sauvegarder
+          </button>
+        <?php endif; ?>
+      </div>
+
       <?php get_template_part('template-parts/reassurance'); ?>
+
     </div>
   </div>
 </div>
+
+<?php if (is_user_logged_in()): ?>
+  <!-- Modal Sauvegarde -->
+  <div class="modal fade" id="modal-save-config" tabindex="-1" aria-labelledby="modalSaveConfigLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalSaveConfigLabel">
+            <i class="fas fa-save me-2"></i>
+            Sauvegarder la configuration
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="config-name-input" class="form-label">
+              Nom de la configuration
+            </label>
+            <input type="text" class="form-control" id="config-name-input" placeholder="Ma configuration télécom"
+              maxlength="100">
+            <div class="form-text">
+              Laissez vide pour générer un nom automatique
+            </div>
+          </div>
+
+          <div id="save-config-message" class="alert" style="display: none;"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+            Annuler
+          </button>
+          <button type="button" class="btn btn-success" id="btn-confirm-save">
+            <i class="fas fa-save me-1"></i>
+            Sauvegarder
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+<?php endif; ?>

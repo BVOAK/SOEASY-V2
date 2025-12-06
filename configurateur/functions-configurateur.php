@@ -1195,57 +1195,130 @@ function soeasy_display_custom_cart_subtotal($subtotal_html, $cart_item, $cart_i
 
 
 /**
- * AJAX : Sauvegarder une nouvelle configuration
+ * AJAX : Sauvegarder configuration manuellement en BDD
  * 
- * Reçoit les données du localStorage et les sauvegarde en base de données.
+ * Si config_id existe : UPDATE
+ * Sinon : INSERT nouvelle config
  * 
  * POST params:
- * - config_name : Nom de la configuration
- * - config_data : JSON complet (string)
+ * - config_id : ID config existante (optionnel)
+ * - config_name : Nom de la config
  * - nonce : soeasy_config_action
  * 
  * Response:
- * - success: { config_id: 123, message: '...' }
- * - error: { message: '...' }
+ * - success: { message, config_id, is_new }
  */
 function soeasy_ajax_save_configuration() {
-    // Vérification du nonce
-    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+    error_log('=== DÉBUT SAVE CONFIGURATION ===');
     
-    // Vérifier que l'utilisateur est connecté
-    $user_id = get_current_user_id();
-    if (!$user_id) {
-        wp_send_json_error(['message' => 'Vous devez être connecté pour sauvegarder une configuration']);
+    try {
+        // Vérifier nonce
+        soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+        
+        $user_id = get_current_user_id();
+        
+        if ($user_id === 0) {
+            wp_send_json_error(['message' => 'Vous devez être connecté pour sauvegarder']);
+        }
+        
+        // Récupérer les données depuis usermeta (source de vérité)
+        $config = soeasy_session_get('soeasy_configurateur', []);
+        $adresses = soeasy_session_get('soeasy_config_adresses', []);
+        $duree_engagement = soeasy_session_get('soeasy_duree_engagement', '0');
+        $mode_financement = soeasy_session_get('soeasy_mode_financement', 'comptant');
+        
+        error_log('Données depuis backend:');
+        error_log('  Config: ' . (is_array($config) ? count($config) : 'INVALID') . ' items');
+        error_log('  Adresses: ' . (is_array($adresses) ? count($adresses) : 'INVALID') . ' items');
+        
+        // Vérifier qu'il y a des données
+        if (empty($adresses) || count($adresses) === 0) {
+            wp_send_json_error(['message' => 'Aucune configuration à sauvegarder (aucune adresse)']);
+        }
+        
+        // Construire config_data
+        $config_data = [
+            'userId' => $user_id,
+            'adresses' => $adresses,
+            'config' => $config,
+            'dureeEngagement' => $duree_engagement,
+            'modeFinancement' => $mode_financement
+        ];
+        
+        // Nom de la config
+        $config_name = sanitize_text_field($_POST['config_name'] ?? '');
+        if (empty($config_name)) {
+            $config_name = 'Configuration du ' . date('d/m/Y à H:i');
+        }
+        
+        // ID config existante (pour UPDATE)
+        $config_id = intval($_POST['config_id'] ?? 0);
+        
+        $is_new = false;
+        
+        if ($config_id > 0) {
+            // ========================================
+            // UPDATE config existante
+            // ========================================
+            error_log('UPDATE config existante ID=' . $config_id);
+            
+            // Vérifier que la config appartient bien à l'user
+            $existing = soeasy_get_configuration($config_id);
+            
+            if (!$existing || $existing->user_id != $user_id) {
+                wp_send_json_error(['message' => 'Configuration introuvable ou accès refusé']);
+            }
+            
+            // ✅ UTILISER LA BONNE FONCTION (celle qui existe dans config-manager.php)
+            $result = soeasy_update_configuration(
+                $config_id,
+                $config_data,  // config_data
+                $config_name,  // config_name
+                'active'       // status
+            );
+            
+            if ($result === false) {
+                wp_send_json_error(['message' => 'Erreur mise à jour']);
+            }
+            
+            error_log('✅ Config mise à jour : ' . $config_name . ' (ID=' . $config_id . ')');
+            
+        } else {
+            // ========================================
+            // INSERT nouvelle config
+            // ========================================
+            error_log('INSERT nouvelle config');
+            
+            // ✅ UTILISER LA BONNE FONCTION (celle qui existe dans config-manager.php)
+            $config_id = soeasy_save_configuration(
+                $user_id,      // user_id
+                $config_data,  // config_data
+                $config_name,  // config_name
+                'active'       // status
+            );
+            
+            if (is_wp_error($config_id)) {
+                wp_send_json_error(['message' => 'Erreur création: ' . $config_id->get_error_message()]);
+            }
+            
+            $is_new = true;
+            
+            error_log('✅ Nouvelle config créée : ' . $config_name . ' (ID=' . $config_id . ')');
+        }
+        
+        error_log('=== FIN SAVE CONFIGURATION - SUCCESS ===');
+        
+        wp_send_json_success([
+            'message' => $is_new ? 'Configuration sauvegardée avec succès' : 'Configuration mise à jour avec succès',
+            'config_id' => $config_id,
+            'config_name' => $config_name,
+            'is_new' => $is_new
+        ]);
+        
+    } catch (Exception $e) {
+        error_log('💥 Exception dans save_configuration: ' . $e->getMessage());
+        wp_send_json_error(['message' => 'Erreur serveur: ' . $e->getMessage()]);
     }
-    
-    // Récupérer les paramètres
-    $config_name = sanitize_text_field($_POST['config_name'] ?? 'Configuration sans nom');
-    $config_data = $_POST['config_data'] ?? '';
-    
-    // Validation
-    if (empty($config_data)) {
-        wp_send_json_error(['message' => 'Données de configuration manquantes']);
-    }
-    
-    // Vérifier que c'est un JSON valide
-    $decoded = json_decode($config_data);
-    if (json_last_error() !== JSON_ERROR_NONE) {
-        wp_send_json_error(['message' => 'Format JSON invalide : ' . json_last_error_msg()]);
-    }
-    
-    // Sauvegarder via la fonction CRUD
-    $config_id = soeasy_save_configuration($user_id, $config_data, $config_name, 'draft');
-    
-    if (is_wp_error($config_id)) {
-        wp_send_json_error(['message' => $config_id->get_error_message()]);
-    }
-    
-    // Succès
-    wp_send_json_success([
-        'message' => 'Configuration enregistrée avec succès',
-        'config_id' => $config_id,
-        'config_name' => $config_name
-    ]);
 }
 add_action('wp_ajax_soeasy_ajax_save_configuration', 'soeasy_ajax_save_configuration');
 
@@ -1653,6 +1726,141 @@ function soeasy_ajax_sync_config_to_session() {
 add_action('wp_ajax_soeasy_ajax_sync_config_to_session', 'soeasy_ajax_sync_config_to_session');
 add_action('wp_ajax_nopriv_soeasy_ajax_sync_config_to_session', 'soeasy_ajax_sync_config_to_session');
 
+
+/**
+ * AJAX : Synchroniser localStorage vers USERMETA (NOUVEAU SYSTÈME)
+ * 
+ * Remplace la sync session WC par une sauvegarde dans usermeta
+ * Plus fiable, pas de conflit avec WooCommerce
+ * 
+ * POST params:
+ * - config : Objet configuration complet (JSON string)
+ * - adresses : Array adresses (JSON string)
+ * - duree_engagement : String
+ * - mode_financement : String
+ * - nonce : soeasy_config_action
+ * 
+ * Response:
+ * - success: { message, adresses_count, config_count }
+ */
+function soeasy_ajax_sync_config_to_usermeta() {
+    error_log('=== DÉBUT SYNC CONFIG TO USERMETA ===');
+    
+    try {
+        // Vérifier nonce
+        soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+        
+        // Parser les données
+        $config_raw = isset($_POST['config']) ? stripslashes($_POST['config']) : '{}';
+        $adresses_raw = isset($_POST['adresses']) ? stripslashes($_POST['adresses']) : '[]';
+        
+        $config = json_decode($config_raw, true);
+        $adresses = json_decode($adresses_raw, true);
+        
+        if (!is_array($config)) $config = [];
+        if (!is_array($adresses)) $adresses = [];
+        
+        error_log('✅ Config parsée: ' . count($config) . ' éléments');
+        error_log('✅ Adresses parsées: ' . count($adresses) . ' éléments');
+        
+        // Enrichir les adresses
+        $enriched_addresses = [];
+        foreach ($adresses as $adr) {
+            $adresse_text = is_array($adr) ? ($adr['adresse'] ?? '') : $adr;
+            if (empty($adresse_text)) continue;
+            
+            $enriched_addresses[] = [
+                'adresse' => $adresse_text,
+                'services' => is_array($adr) ? ($adr['services'] ?? []) : [],
+                'ville_courte' => soeasy_get_ville_courte($adresse_text),
+                'ville_longue' => soeasy_get_ville_longue($adresse_text)
+            ];
+        }
+        
+        // Récupérer les autres paramètres
+        $duree_engagement = sanitize_text_field($_POST['duree_engagement'] ?? '0');
+        $mode_financement = sanitize_text_field($_POST['mode_financement'] ?? 'comptant');
+        
+        error_log('Params: duree=' . $duree_engagement . ', mode=' . $mode_financement);
+        
+        // ✅ UTILISER LES FONCTIONS EXISTANTES (qui utilisent usermeta en interne)
+        soeasy_session_set('soeasy_configurateur', $config);
+        soeasy_session_set('soeasy_config_adresses', $enriched_addresses);
+        soeasy_session_set('soeasy_duree_engagement', $duree_engagement);
+        soeasy_session_set('soeasy_mode_financement', $mode_financement);
+        
+        error_log('✅ Données sauvegardées via soeasy_session_set()');
+        
+        // VÉRIFICATION : Relire pour confirmer
+        $check_config = soeasy_session_get('soeasy_configurateur', []);
+        $check_adresses = soeasy_session_get('soeasy_config_adresses', []);
+        
+        error_log('Vérification après save:');
+        error_log('  Config: ' . (is_array($check_config) ? count($check_config) : 'INVALID') . ' items');
+        error_log('  Adresses: ' . (is_array($check_adresses) ? count($check_adresses) : 'INVALID') . ' items');
+        
+        error_log('✅ Config synchronisée: ' . count($enriched_addresses) . ' adresses, ' . count($config) . ' configs');
+        error_log('=== FIN SYNC CONFIG TO USERMETA - SUCCESS ===');
+        
+        wp_send_json_success([
+            'message' => 'Config synchronisée',
+            'adresses_count' => count($check_adresses),
+            'config_count' => count($check_config)
+        ]);
+        
+    } catch (Exception $e) {
+        error_log('💥 Exception dans sync_config_to_usermeta: ' . $e->getMessage());
+        wp_send_json_error(['message' => 'Erreur serveur: ' . $e->getMessage()]);
+    }
+}
+add_action('wp_ajax_soeasy_ajax_sync_config_to_usermeta', 'soeasy_ajax_sync_config_to_usermeta');
+add_action('wp_ajax_nopriv_soeasy_ajax_sync_config_to_usermeta', 'soeasy_ajax_sync_config_to_usermeta');
+
+
+/**
+ * AJAX : Vider les données du configurateur (NOUVEAU SYSTÈME)
+ * 
+ * Utilisé lors de la réconciliation pour nettoyer les données
+ * Fonctionne pour users (usermeta) et guests (session WC)
+ * 
+ * POST params:
+ * - nonce : soeasy_config_action
+ * 
+ * Response:
+ * - success: { message: '...' }
+ */
+function soeasy_ajax_clear_usermeta() {
+    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
+    
+    $user_id = get_current_user_id();
+    
+    if ($user_id > 0) {
+        // User connecté : vider usermeta
+        delete_user_meta($user_id, 'soeasy_soeasy_configurateur');
+        delete_user_meta($user_id, 'soeasy_soeasy_config_adresses');
+        delete_user_meta($user_id, 'soeasy_soeasy_duree_engagement');
+        delete_user_meta($user_id, 'soeasy_soeasy_mode_financement');
+        
+        error_log('🧹 Usermeta vidés pour user ' . $user_id);
+    } else {
+        // Guest : utiliser la fonction existante qui gère la session WC
+        soeasy_start_session_if_needed();
+        
+        if (WC()->session) {
+            WC()->session->set('soeasy_configurateur', []);
+            WC()->session->set('soeasy_config_adresses', []);
+            WC()->session->set('soeasy_duree_engagement', 0);
+            WC()->session->set('soeasy_mode_financement', '');
+        }
+        
+        error_log('🧹 Session WC vidée pour guest');
+    }
+    
+    wp_send_json_success(['message' => 'Données vidées']);
+}
+add_action('wp_ajax_soeasy_ajax_clear_usermeta', 'soeasy_ajax_clear_usermeta');
+add_action('wp_ajax_nopriv_soeasy_ajax_clear_usermeta', 'soeasy_ajax_clear_usermeta');
+
 /**
  * AJAX : Vérifier si la session contient une configuration
  * 
@@ -1934,6 +2142,8 @@ function soeasy_ajax_load_last_configuration() {
     ]);
 }
 add_action('wp_ajax_soeasy_ajax_load_last_configuration', 'soeasy_ajax_load_last_configuration');
+
+
 
 
 /**
