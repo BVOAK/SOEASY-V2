@@ -287,6 +287,7 @@ jQuery(document).ready(function ($) {
         window.updateSaveButton();
       }
 
+      reconcileConfiguration();
       updateRecapitulatif();
     });
   }

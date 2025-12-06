@@ -2153,8 +2153,14 @@ add_action('wp_ajax_soeasy_ajax_load_last_configuration', 'soeasy_ajax_load_last
  * - remember : 1 ou 0
  * - nonce : soeasy_config_action
  * 
+ * NOUVEAU : Synchronise aussi les données guest → usermeta
+ * - config : JSON config (optionnel)
+ * - adresses : JSON adresses (optionnel)
+ * - duree_engagement : String (optionnel)
+ * - mode_financement : String (optionnel)
+ * 
  * Response:
- * - success: { user_id, user_display_name }
+ * - success: { user_id, user_display_name, nonces, sync_done }
  * - error: { message }
  */
 function soeasy_ajax_login() {
@@ -2194,10 +2200,65 @@ function soeasy_ajax_login() {
         
         error_log('✅ Connexion réussie pour user ID=' . $user->ID);
         
+        // ✅ GÉNÉRER DE NOUVEAUX NONCES pour l'utilisateur connecté
+        $new_nonce_config = wp_create_nonce('soeasy_config_action');
+        $new_nonce_cart = wp_create_nonce('soeasy_cart_action');
+        $new_nonce_address = wp_create_nonce('soeasy_address_action');
+        
+        // ✅ NOUVEAU : Synchroniser les données guest → usermeta SI présentes
+        $sync_done = false;
+        
+        if (!empty($_POST['config']) || !empty($_POST['adresses'])) {
+            error_log('📤 Synchronisation des données guest vers usermeta...');
+            
+            // Parser les données
+            $config_raw = isset($_POST['config']) ? stripslashes($_POST['config']) : '{}';
+            $adresses_raw = isset($_POST['adresses']) ? stripslashes($_POST['adresses']) : '[]';
+            
+            $config = json_decode($config_raw, true);
+            $adresses = json_decode($adresses_raw, true);
+            
+            if (!is_array($config)) $config = [];
+            if (!is_array($adresses)) $adresses = [];
+            
+            // Enrichir les adresses
+            $enriched_addresses = [];
+            foreach ($adresses as $adr) {
+                $adresse_text = is_array($adr) ? ($adr['adresse'] ?? '') : $adr;
+                if (empty($adresse_text)) continue;
+                
+                $enriched_addresses[] = [
+                    'adresse' => $adresse_text,
+                    'services' => is_array($adr) ? ($adr['services'] ?? []) : [],
+                    'ville_courte' => soeasy_get_ville_courte($adresse_text),
+                    'ville_longue' => soeasy_get_ville_longue($adresse_text)
+                ];
+            }
+            
+            // Récupérer les autres paramètres
+            $duree_engagement = sanitize_text_field($_POST['duree_engagement'] ?? '0');
+            $mode_financement = sanitize_text_field($_POST['mode_financement'] ?? 'comptant');
+            
+            // Sauvegarder dans usermeta (l'utilisateur est maintenant connecté)
+            if (!empty($enriched_addresses)) {
+                soeasy_session_set('soeasy_configurateur', $config);
+                soeasy_session_set('soeasy_config_adresses', $enriched_addresses);
+                soeasy_session_set('soeasy_duree_engagement', $duree_engagement);
+                soeasy_session_set('soeasy_mode_financement', $mode_financement);
+                
+                $sync_done = true;
+                error_log('✅ Données synchronisées en usermeta : ' . count($enriched_addresses) . ' adresses');
+            }
+        }
+        
         wp_send_json_success([
             'user_id' => $user->ID,
             'user_display_name' => $user->display_name,
-            'message' => 'Connexion réussie'
+            'message' => 'Connexion réussie',
+            'nonce_config' => $new_nonce_config,
+            'nonce_cart' => $new_nonce_cart,
+            'nonce_address' => $new_nonce_address,
+            'sync_done' => $sync_done
         ]);
         
     } catch (Exception $e) {
@@ -2206,6 +2267,8 @@ function soeasy_ajax_login() {
     }
 }
 add_action('wp_ajax_nopriv_soeasy_ajax_login', 'soeasy_ajax_login');
+
+
 
 /**
  * ============================================================================

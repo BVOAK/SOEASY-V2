@@ -9,7 +9,7 @@
  * @date 2025-12-06
  */
 
-(function($) {
+(function ($) {
   'use strict';
 
   /**
@@ -17,7 +17,7 @@
    * VARIABLES GLOBALES
    * ========================================
    */
-  
+
   let loginModal = null;
 
   /**
@@ -25,8 +25,8 @@
    * INITIALISATION
    * ========================================
    */
-  
-  $(document).ready(function() {
+
+  $(document).ready(function () {
     initLoginModal();
     bindLoginEvents();
   });
@@ -50,7 +50,7 @@
   /**
    * Ouvrir le modal de connexion
    */
-  window.showLoginModal = function() {
+  window.showLoginModal = function () {
     if (!loginModal) {
       initLoginModal();
     }
@@ -65,7 +65,7 @@
     $('#login-error-message').hide();
 
     // Focus sur username après ouverture
-    $('#modal-login').one('shown.bs.modal', function() {
+    $('#modal-login').one('shown.bs.modal', function () {
       $('#login-username').focus();
     });
 
@@ -82,7 +82,7 @@
 
   function bindLoginEvents() {
     // Soumission du formulaire de connexion
-    $(document).on('submit', '#form-login-ajax', function(e) {
+    $(document).on('submit', '#form-login-ajax', function (e) {
       e.preventDefault();
       handleLogin();
     });
@@ -114,6 +114,26 @@
 
     console.log('🔐 Tentative de connexion pour:', username);
 
+    // ✅ RÉCUPÉRER les données localStorage pour les envoyer avec le login
+    let localConfig = null;
+    let configData = {};
+    let adressesData = [];
+
+    try {
+      const configStr = localStorage.getItem('soeasyConfig') || '{}';
+      const adressesStr = localStorage.getItem('soeasyAdresses') || '[]';
+
+      configData = JSON.parse(configStr);
+      adressesData = JSON.parse(adressesStr);
+
+      console.log('📦 Données à synchroniser:', {
+        config: Object.keys(configData).length,
+        adresses: adressesData.length
+      });
+    } catch (e) {
+      console.warn('⚠️ Erreur parsing localStorage:', e);
+    }
+
     // Appel AJAX WordPress
     $.ajax({
       url: soeasyVars.ajaxurl,
@@ -123,11 +143,20 @@
         username: username,
         password: password,
         remember: remember ? '1' : '0',
-        nonce: soeasyVars.nonce_config
+        nonce: soeasyVars.nonce_config,
+        // ✅ ENVOYER les données guest
+        config: JSON.stringify(configData),
+        adresses: JSON.stringify(adressesData),
+        duree_engagement: localStorage.getItem('selectedDureeEngagement') || '0',
+        mode_financement: localStorage.getItem('selectedFinancementMode') || 'comptant'
       }
-    }).done(function(response) {
+    }).done(function (response) {
       if (response.success) {
         console.log('✅ Connexion réussie');
+
+        if (response.data.sync_done) {
+          console.log('✅ Données synchronisées côté serveur');
+        }
 
         // Fermer le modal
         if (loginModal) {
@@ -139,50 +168,39 @@
           showToastSuccess('Connexion réussie ! Bienvenue ' + response.data.user_display_name);
         }
 
-        // Mettre à jour soeasyVars
+        // ✅ METTRE À JOUR soeasyVars
         if (typeof soeasyVars !== 'undefined') {
           soeasyVars.userId = response.data.user_id;
           soeasyVars.userDisplayName = response.data.user_display_name;
+          soeasyVars.nonce_config = response.data.nonce_config;
+          soeasyVars.nonce_cart = response.data.nonce_cart;
+          soeasyVars.nonce_address = response.data.nonce_address;
         }
 
         // Mettre à jour localStorage
         localStorage.setItem('soeasyUserId', response.data.user_id);
 
-        // Appeler la réconciliation pour gérer le passage guest → user
-        if (typeof reconcileConfiguration === 'function') {
-          reconcileConfiguration().then(function() {
-            console.log('✅ Réconciliation après login terminée');
-
-            // Mettre à jour le bouton de sauvegarde
-            if (typeof window.updateSaveButton === 'function') {
-              window.updateSaveButton();
-            }
-
-            // Ouvrir automatiquement le modal de sauvegarde après un court délai
-            setTimeout(function() {
-              if (typeof window.showSaveConfigModal === 'function') {
-                window.showSaveConfigModal();
-              }
-            }, 800);
-          }).catch(function(error) {
-            console.error('❌ Erreur réconciliation:', error);
-          });
-        } else {
-          console.warn('⚠️ reconcileConfiguration non disponible, rechargement de la page');
-          setTimeout(function() {
-            window.location.reload();
-          }, 1000);
+        // Mettre à jour le bouton de sauvegarde
+        if (typeof window.updateSaveButton === 'function') {
+          window.updateSaveButton();
         }
+
+        // Ouvrir le modal de sauvegarde
+        setTimeout(function () {
+          if (typeof window.showSaveConfigModal === 'function') {
+            window.showSaveConfigModal();
+          }
+        }, 500);
 
       } else {
         // Erreur de connexion
         console.error('❌ Erreur connexion:', response.data);
         $errorDiv.text(response.data.message || 'Identifiants incorrects').show();
       }
-    }).fail(function(xhr, status, error) {
-      console.error('❌ Échec réseau:', {status, error});
+    }).fail(function (xhr, status, error) {
+      console.error('❌ Échec réseau:', { status, error });
       $errorDiv.text('Erreur de communication avec le serveur.').show();
-    }).always(function() {
+    }).always(function () {
       // Réactiver le bouton
       $btn.prop('disabled', false).html(originalHtml);
     });
