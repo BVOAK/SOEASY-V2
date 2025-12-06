@@ -18,38 +18,53 @@ function soeasy_start_session_if_needed()
     }
 }
 
-function soeasy_session_set($key, $value) {
-    soeasy_start_session_if_needed();
-    
-    if (!WC()->session) {
-        error_log('❌ WC Session non disponible pour set: ' . $key);
-        return false;
+function soeasy_session_set($key, $value, $user_id = null) {
+    if (!$user_id) {
+        $user_id = get_current_user_id();
     }
     
-    WC()->session->set($key, $value);
-    
-    if (method_exists(WC()->session, 'save_data')) {
-        WC()->session->save_data();
+    if ($user_id === 0) {
+        // Guest : utiliser WC session (temporaire)
+        soeasy_start_session_if_needed();
+        if (WC()->session) {
+            WC()->session->set($key, $value);
+            error_log('✅ Guest session set: ' . $key);
+        }
+        return true;
     }
     
-    $value_desc = is_array($value) ? count($value) . ' items' : (is_string($value) ? substr($value, 0, 50) : gettype($value));
-    error_log('✅ Session set & saved: ' . $key . ' = ' . $value_desc . ' (user: ' . (is_user_logged_in() ? get_current_user_id() : 'guest') . ')');
+    // User connecté : utiliser usermeta (PERSISTANT)
+    $meta_key = 'soeasy_' . $key;
+    $result = update_user_meta($user_id, $meta_key, $value);
     
-    return true;
+    error_log('✅ Usermeta set: ' . $meta_key . ' for user ' . $user_id . ' = ' . (is_array($value) ? count($value) . ' items' : 'scalar'));
+    
+    return $result !== false;
 }
 
-function soeasy_session_get($key, $default = null) {
-    soeasy_start_session_if_needed();
+function soeasy_session_get($key, $default = null, $user_id = null) {
+    if (!$user_id) {
+        $user_id = get_current_user_id();
+    }
     
-    if (!WC()->session) {
-        error_log('⚠️ WC Session non disponible pour get: ' . $key);
+    if ($user_id === 0) {
+        // Guest : lire depuis WC session
+        soeasy_start_session_if_needed();
+        if (WC()->session) {
+            return WC()->session->get($key, $default);
+        }
         return $default;
     }
     
-    $value = WC()->session->get($key, $default);
+    // User connecté : lire depuis usermeta
+    $meta_key = 'soeasy_' . $key;
+    $value = get_user_meta($user_id, $meta_key, true);
     
-    $value_desc = is_array($value) ? count($value) . ' items' : (is_string($value) ? substr($value, 0, 50) : gettype($value));
-    error_log('📥 Session get: ' . $key . ' = ' . $value_desc);
+    if (empty($value)) {
+        return $default;
+    }
+    
+    error_log('✅ Usermeta get: ' . $meta_key . ' for user ' . $user_id . ' = ' . (is_array($value) ? count($value) . ' items' : 'scalar'));
     
     return $value;
 }
@@ -1927,83 +1942,5 @@ add_action('wp_ajax_soeasy_ajax_load_last_configuration', 'soeasy_ajax_load_last
  * ============================================================================
  */
 
-/**
- * TEMPORAIRE - Debug : Afficher le contenu de la session
- */
-function soeasy_ajax_debug_session() {
-    soeasy_verify_nonce($_POST['nonce'] ?? '', 'soeasy_config_action');
-    
-    soeasy_start_session_if_needed();
-    
-    $session_data = [
-        'configurateur' => WC()->session->get('soeasy_configurateur', 'VIDE'),
-        'adresses' => WC()->session->get('soeasy_config_adresses', 'VIDE'),
-        'duree' => WC()->session->get('soeasy_duree_engagement', 'VIDE'),
-        'mode' => WC()->session->get('soeasy_mode_financement', 'VIDE'),
-        'has_session' => WC()->session->has_session(),
-        'customer_id' => WC()->session->get_customer_id()
-    ];
-    
-    error_log('🔍 DEBUG SESSION: ' . print_r($session_data, true));
-    
-    wp_send_json_success($session_data);
-}
-add_action('wp_ajax_soeasy_ajax_debug_session', 'soeasy_ajax_debug_session');
-
-
-/**
- * HOOK : Logger TOUTES les lectures de session au chargement
- */
-add_action('template_redirect', function() {
-    if (is_page_template('page-configurateur.php')) {
-        error_log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        error_log('🔄 CHARGEMENT PAGE CONFIGURATEUR');
-        error_log('User ID: ' . get_current_user_id());
-        error_log('Is logged in: ' . (is_user_logged_in() ? 'YES' : 'NO'));
-        
-        if (function_exists('WC') && WC()->session) {
-            $session_key = is_user_logged_in() ? get_current_user_id() : WC()->session->get_customer_id();
-            error_log('WC Session key: ' . $session_key);
-            
-            // Lire DIRECTEMENT depuis la BDD
-            global $wpdb;
-            $db_session = $wpdb->get_var($wpdb->prepare(
-                "SELECT session_value FROM {$wpdb->prefix}woocommerce_sessions WHERE session_key = %s",
-                $session_key
-            ));
-            
-            if ($db_session) {
-                error_log('✅ Session BDD trouvée: ' . strlen($db_session) . ' bytes');
-                
-                $db_data = maybe_unserialize($db_session);
-                error_log('Clés en BDD: ' . print_r(array_keys($db_data), true));
-                
-                if (isset($db_data['soeasy_config_adresses'])) {
-                    $count = is_array($db_data['soeasy_config_adresses']) ? count($db_data['soeasy_config_adresses']) : 0;
-                    error_log('  soeasy_config_adresses en BDD: ' . $count . ' items');
-                } else {
-                    error_log('  ❌ soeasy_config_adresses ABSENT de la BDD');
-                }
-            } else {
-                error_log('❌ AUCUNE session en BDD');
-            }
-            
-            // Lire depuis WC()->session
-            $wc_adresses = WC()->session->get('soeasy_config_adresses', 'NOT_SET');
-            if ($wc_adresses === 'NOT_SET') {
-                error_log('  ❌ soeasy_config_adresses non chargé par WC');
-            } elseif (is_array($wc_adresses)) {
-                error_log('  ✅ soeasy_config_adresses chargé par WC: ' . count($wc_adresses) . ' items');
-            } else {
-                error_log('  ⚠️ soeasy_config_adresses invalide: ' . gettype($wc_adresses));
-            }
-            
-        } else {
-            error_log('❌ WooCommerce session non disponible');
-        }
-        
-        error_log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    }
-}, 5); // Priorité 5 pour s'exécuter tôt
 
 ?>
