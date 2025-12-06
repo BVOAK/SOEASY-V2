@@ -105,7 +105,15 @@ function soeasy_get_adresses_configurateur() {
 function soeasy_add_adresse_configurateur($adresse, $services = []) {
     $adresses = soeasy_session_get('soeasy_config_adresses', []);
     
-    // ✅ NOUVEAU : Enrichir directement lors de l'ajout
+    // VÉRIFIER SI L'ADRESSE EXISTE DÉJÀ
+    foreach ($adresses as $existing) {
+        if (isset($existing['adresse']) && $existing['adresse'] === $adresse) {
+            error_log('⚠️ Adresse déjà présente, skip ajout : ' . $adresse);
+            return $adresses; // Ne pas ajouter de doublon
+        }
+    }
+
+    // Enrichir directement lors de l'ajout
     $nouvelle_adresse = [
         'adresse' => $adresse,
         'services' => $services,
@@ -115,6 +123,8 @@ function soeasy_add_adresse_configurateur($adresse, $services = []) {
     
     $adresses[] = $nouvelle_adresse;
     soeasy_session_set('soeasy_config_adresses', $adresses);
+
+    error_log('✅ Nouvelle adresse ajoutée : ' . $adresse);
     
     return $adresses;
 }

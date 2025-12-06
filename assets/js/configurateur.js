@@ -576,14 +576,14 @@ jQuery(document).ready(function ($) {
 
             if (response.data.addresses_enriched) {
               localStorage.setItem('soeasyAdresses', JSON.stringify(response.data.addresses_enriched));
-              window.updateSaveButton();
             }
 
-            // MàJ du localStorage
-            const adresses = JSON.parse(localStorage.getItem('soeasyAdresses')) || [];
-            adresses.push({ adresse: adresse });
-            localStorage.setItem('soeasyAdresses', JSON.stringify(adresses));
             updateSidebarProduitsRecap();
+
+            // Mettre à jour le bouton de sauvegarde
+            if (typeof window.updateSaveButton === 'function') {
+              window.updateSaveButton();
+            }
 
             $(".btn-suivant").removeClass("disabled");
 
